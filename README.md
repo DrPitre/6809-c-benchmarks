@@ -263,3 +263,14 @@ an error; it does not silently return success.
 Benchmark names on the report link to the source at the exact Git commit used
 by CI. Expand **Test purposes and source files** for descriptions and links
 to supporting source files. Local previews without a commit ID use `main`.
+
+### Failure discovered by the expanded suite
+
+The pinned C3 compiler built with GCC on GitHub's Linux runner crashes with
+exit 139 while compiling `list16.c`, before its target-code optimizer runs.
+Both optimizer configurations expose it. The same source compiles and executes
+correctly with the locally built C3 on macOS; CMOC and LLVM pass it on both
+hosts. This identifies a host-dependent C3 compilation failure, not a runtime
+checksum failure. The underlying compiler defect has not been diagnosed.
+The report retains the failure and excludes its size; CI correctly flags the
+C3 jobs. Source, commands, and diagnostics are preserved for investigation.

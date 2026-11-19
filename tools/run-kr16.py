@@ -104,16 +104,19 @@ def main():
         for reference in REFERENCES:
             name = reference.__name__
             row = {'benchmark': name, 'status': 'FAIL'}
+            phase = 'source preparation'
             try:
                 objects = []
-                hashes = {}
-                row['source_files'] = []
+                hashes = {relative: hashlib.sha256((ROOT / 'benchmarks/kr16' / relative).read_bytes()).hexdigest()
+                          for relative in sources(name)}
+                row['source_files'] = ['benchmarks/kr16/' + relative for relative in sources(name)]
+                row['source_sha256'] = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
+                row['source_hashes'] = hashes
+                phase = 'compilation'
                 for relative in sources(name):
                     source = ROOT / 'benchmarks/kr16' / relative
                     stem = source.stem
                     shutil.copyfile(source, build / source.name)
-                    hashes[relative] = hashlib.sha256(source.read_bytes()).hexdigest()
-                    row['source_files'].append('benchmarks/kr16/' + relative)
                     if args.compiler == 'c3':
                         # -a stops BEFORE optimization, and writes beside the source.
                         run(['c3', stem + '.c', '-a'])
@@ -128,8 +131,7 @@ def main():
                     else:
                         run(['cmoc', '--usim', '-O' + args.optimization, '-i', '-c', '-o', stem + '.o', stem + '.c'])
                     objects.append(stem + '.o')
-                row['source_sha256'] = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
-                row['source_hashes'] = hashes
+                phase = 'linking'
                 if args.compiler == 'llvm':
                     run(['mc6809-ld', '-T', str(ROOT / 'adapters/kr16-llvm.ld'),
                          '-Map=' + name + '.map', '-o', name + '.elf', 'harness.o', *objects, *libraries])
@@ -137,11 +139,15 @@ def main():
                 else:
                     run(['lwlink', '--format=srec', '--script=' + str(ROOT / 'adapters/kr16-usim.link'),
                          '--map=' + name + '.map', '-o', name + '.srec', 'harness.o', *objects, *libraries])
+                phase = 'execution'
                 output = run(['usim', name + '.srec'])
                 actual = [tuple(int(word, 16) for word in line.split()) for line in output.splitlines()]
                 expected = [(seed, reference(seed)) for seed in SEEDS]
                 row.update(status='PASS' if actual == expected else 'FAIL', output=output, expected=expected,
                            loaded_bytes=cmoc_adapter.loaded_bytes(build / (name + '.srec')))
+                if actual != expected:
+                    row.update(error='Checksum mismatch', failure_stage='verification')
+                phase = 'size measurement'
                 if args.compiler == 'llvm':
                     sizes = run(['mc6809-size', '-A', *objects])
                     sections = re.findall(r'^\.text(?:\.\S+)?\s+(\d+)\s+\d+\s*$', sizes, re.M)
@@ -158,7 +164,11 @@ def main():
                         total += int(sections[0], 16)
                     row['kernel_code_bytes'] = total
             except (OSError, ValueError, subprocess.SubprocessError) as error:
-                row.update(status='FAIL', error=str(error))
+                row.update(status='FAIL', error=str(error), failure_stage=phase)
+                if isinstance(error, subprocess.CalledProcessError):
+                    row['exit_code'] = error.returncode
+                    if phase == 'compilation' and error.returncode in (-11, 139):
+                        row['error'] = 'Compiler crashed (segmentation fault, exit ' + str(error.returncode) + ')'
             report['rows'].append(row)
             print(name, row['status'])
     except (OSError, ValueError, subprocess.SubprocessError) as error:

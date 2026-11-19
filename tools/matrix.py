@@ -128,6 +128,16 @@ def render(reports):
         statuses.append([labels[name]] + [shared.get((name, enabled, compiler), {}).get("status", "NOT RUN")
                                          for enabled in (True, False) for compiler in COMPILERS])
     table("Shared-suite correctness", ["Benchmark"] + [compiler + " " + setting for setting in ("on", "off") for compiler in COMPILERS], statuses)
+    failures = []
+    for report in reports:
+        if report.get("suite") != "kr16":
+            continue
+        for row in report["rows"]:
+            if row["status"] != "PASS":
+                failures.append([report["compiler"], report["flags"], labels.get(row["benchmark"], row["benchmark"]),
+                                 row.get("failure_stage", "Unknown"), row.get("error", "Checksum mismatch")])
+    if failures:
+        table("Failures requiring investigation", ["Compiler", "Flags", "Benchmark", "Stage", "Diagnostic"], failures)
     paragraph("PASS means all four seeds match independent reference results. Benchmark names link to the source revision used in this report. The shared sort uses unsigned words and 16-bit arithmetic; it is a distinct workload from the original C89 byte sort.")
     content.append("<details><summary>Test purposes and source files</summary>")
     source_rows = []
