@@ -9,7 +9,7 @@ extensions belong in separately labeled comparisons.
 
 The shared **kr16** suite runs identical K&R-compatible sources under both
 C3 (C-Cubed), CMOC, and LLVM-MC6809 1.0 on a bare-metal 6809 simulator. All three compilers are checked
-with optimization disabled and enabled. All three benchmark functions must match independent
+with optimization disabled and enabled. All twelve shared benchmarks must match independent
 reference results for four seeds before their sizes enter the comparison.
 
 The original C89 suite remains available. CMOC runs it; C3's source-compatibility
@@ -210,8 +210,9 @@ python3 tools/matrix.py build/reports build/site
 The unchanged kr16 benchmark functions are compiled with `-mcpu=mc6809 -std=c89 -fno-pie
 -fno-lto` and `-O0` or `-O2`. LLVM's integrated assembler and LLD produce ELF;
 `mc6809-objcopy` converts it to S-records for the same USIM used by C3/CMOC.
-Only referenced LLVM compiler-runtime helpers are linked. No C library,
-6309 instructions, or link-time optimization is used.
+Only referenced LLVM compiler-runtime and C-library helper routines are linked
+(including `memmove` when LLVM recognizes a copy loop). No full C-library
+startup, 6309 instructions, or link-time optimization is used.
 
 The shared harness is translated to LLVM assembler directive/label syntax,
 with a calling-convention branch for X as the first argument and return
@@ -219,9 +220,46 @@ register. This adds four bytes of register-transfer instructions to the
 loaded harness; the benchmark function code metric excludes it. LLVM reserves 24 bytes
 of direct-page scratch registers, mapped at $0000–$0017; those RAM bytes are
 not counted as loaded code. ELF files, generated assembly, maps, and version
-banners are retained in CI artifacts. Benchmark code size sums the benchmark function
-object's `.text` sections, excluding metadata, helpers, and ELF headers.
+banners are retained in CI artifacts. Benchmark code size sums the benchmark and supporting
+objects' `.text` sections, excluding metadata, helpers, and ELF headers.
 
 `-O2` is a general optimization setting, not a size-minimizing setting. LLVM
 unrolls the CRC loop at `-O2`, so its code can be larger than at `-O0`.
 The matrix reports actual sizes without interpreting size as execution speed.
+
+## Expanded shared test coverage
+
+The kr16 suite contains 12 tests, each run with four seeds on all three
+compilers at two optimization settings: **288 target checksum checks**.
+Host GCC/Clang also check the shared sources. The original three C89 tests
+remain a separate suite.
+
+| Test | Main coverage |
+| --- | --- |
+| CRC16 | Shifts, XOR, nested loops |
+| Insertion sort | Array indexing, comparisons, nested loops |
+| 16-bit arithmetic | Repeated shifts, XOR, wraparound addition |
+| Multiplication | Variable unsigned products and wraparound |
+| Division and remainder | Unsigned quotient/remainder, varying nonzero divisors |
+| Word copy | Pointer increments, copying, overlapping left shift |
+| Binary search | Present/absent keys, comparisons, conditional branches |
+| Switch dispatch | Eight state-dependent cases |
+| Function calls | Three arguments and a separately compiled callee |
+| Recursive GCD | Recursion, remainder, separate translation units |
+| Signed arithmetic | Signed comparisons and bounded additions/subtractions |
+| Linked structures | Structure layout, fields, pointer traversal |
+
+`tools/shared_suite.py` owns the inventory, descriptions, and independent
+Python reference calculations. Search uses a direct expected-index formula;
+GCD uses Python's `math.gcd`; the pointer tests use Python sequences and
+index arithmetic rather than reproducing C pointer operations.
+
+Supporting functions are compiled separately without LTO. Their code counts
+as benchmark code, while compiler/library helpers count only toward complete
+program size. Report hashes cover every source file for a test. The runtime
+error hook stops USIM with a nonzero status if a C3 arithmetic helper reports
+an error; it does not silently return success.
+
+Benchmark names on the report link to the source at the exact Git commit used
+by CI. Expand **Test purposes and source files** for descriptions and links
+to supporting source files. Local previews without a commit ID use `main`.

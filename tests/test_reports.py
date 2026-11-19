@@ -6,7 +6,7 @@ import unittest
 
 TOOLS = Path(__file__).resolve().parents[1] / 'tools'
 sys.path.insert(0, str(TOOLS))
-from matrix import render, validate_shared_sources
+from matrix import render, validate_shared_sources, source_link
 spec = importlib.util.spec_from_file_location('run_cmoc', TOOLS / 'run-cmoc.py')
 cmoc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cmoc)
@@ -69,10 +69,21 @@ class ReportTests(unittest.TestCase):
                                       "source_sha256": "same", "loaded_bytes": size,
                                       "kernel_code_bytes": size}]})
         markdown, _ = render(reports)
-        self.assertIn("| CRC16 | On | 467 | 374 | 430 | CMOC by 56 B |", markdown)
+        self.assertIn("| On | 467 | 374 | 430 | CMOC by 56 B |", markdown)
         reports[-1]["rows"][0]["status"] = "FAIL"
         markdown, _ = render(reports)
-        self.assertIn("| CRC16 | On | 467 | 374 | Excluded (FAIL) | — |", markdown)
+        self.assertIn("| On | 467 | 374 | Excluded (FAIL) | — |", markdown)
+
+    def test_source_links_pin_report_revision(self):
+        revision = 'a' * 40
+        link = source_link('Function calls', 'benchmarks/kr16/calls16.c', revision)
+        self.assertEqual(link.url, 'https://github.com/DrPitre/6809-c-benchmarks/blob/' + revision + '/benchmarks/kr16/calls16.c')
+        report = {'compiler': 'C3', 'suite': 'kr16', 'kind': 'runtime',
+                  'target': '6809 / USIM bare-metal', 'revision': revision,
+                  'flags': 'optimizer on', 'rows': []}
+        markdown, document = render([report])
+        self.assertIn('/blob/' + revision + '/benchmarks/kr16/support/step3.c', document)
+        self.assertIn('[Function calls](' + link.url + ')', markdown)
 
 
 if __name__ == '__main__':

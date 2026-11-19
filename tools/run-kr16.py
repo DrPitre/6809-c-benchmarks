@@ -9,7 +9,8 @@ import re
 import shutil
 import subprocess
 
-from check import SEEDS, crc16, insertion_sort, mix16
+from check import SEEDS
+from shared_suite import REFERENCES, sources
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('cmoc_adapter', ROOT / 'tools/run-cmoc.py')
@@ -64,7 +65,7 @@ def main():
             report['release'] = 'RELEASE_1.0'
             report['release_url'] = 'https://github.com/markrvmurray/llvm-mc6809/releases/tag/RELEASE_1.0'
             report['abi_scratch_bytes'] = 24
-            libraries = ['-L' + str(ROOT / 'build/llvm/lib/clang/24/lib/mc6809'), '-lclang_rt.builtins']
+            libraries = ['-L' + str(ROOT / 'build/llvm/lib/clang/24/lib/mc6809'), '-lclang_rt.builtins', '-L' + str(ROOT / 'build/llvm/lib/clang-runtimes/mc6809/lib'), '-lc']
         else:
             report['version'] = run(['cmoc', '--version']).strip()
             libraries = ['-L' + str(toolchain / 'share/cmoc/lib'), '-lcmoc-std-usim', '-lcmoc-crt-usim']
@@ -100,50 +101,62 @@ def main():
             if args.compiler == 'cmoc':
                 harness.append('-DCMOC_ABI')
             run([*harness, str(ROOT / 'adapters/kr16-usim.asm')])
-        for reference in (crc16, insertion_sort, mix16):
+        for reference in REFERENCES:
             name = reference.__name__
             row = {'benchmark': name, 'status': 'FAIL'}
             try:
-                source = ROOT / 'benchmarks/kr16' / (name + '.c')
-                shutil.copyfile(source, build / source.name)
-                row['source_sha256'] = hashlib.sha256(source.read_bytes()).hexdigest()
-                if args.compiler == 'c3':
-                    # -a stops BEFORE optimization, and writes beside the source.
-                    run(['c3', name + '.c', '-a'])
-                    assembly = name + '.a'
-                    if args.optimization == '2':
-                        run(['c3optx', assembly, name + '.opt.a'])
-                        assembly = name + '.opt.a'
-                    run(['c3-as', assembly, '-o=' + name + '.o'])
-                elif args.compiler == 'llvm':
-                    run(['mc6809-clang', '-mcpu=mc6809', '-std=c89', '-fno-pie', '-fno-lto',
-                         '-O' + args.optimization, '-save-temps=obj', '-c', '-o', name + '.o', name + '.c'])
-                else:
-                    run(['cmoc', '--usim', '-O' + args.optimization, '-i', '-c', '-o', name + '.o', name + '.c'])
+                objects = []
+                hashes = {}
+                row['source_files'] = []
+                for relative in sources(name):
+                    source = ROOT / 'benchmarks/kr16' / relative
+                    stem = source.stem
+                    shutil.copyfile(source, build / source.name)
+                    hashes[relative] = hashlib.sha256(source.read_bytes()).hexdigest()
+                    row['source_files'].append('benchmarks/kr16/' + relative)
+                    if args.compiler == 'c3':
+                        # -a stops BEFORE optimization, and writes beside the source.
+                        run(['c3', stem + '.c', '-a'])
+                        assembly = stem + '.a'
+                        if args.optimization == '2':
+                            run(['c3optx', assembly, stem + '.opt.a'])
+                            assembly = stem + '.opt.a'
+                        run(['c3-as', assembly, '-o=' + stem + '.o'])
+                    elif args.compiler == 'llvm':
+                        run(['mc6809-clang', '-mcpu=mc6809', '-std=c89', '-fno-pie', '-fno-lto',
+                             '-O' + args.optimization, '-save-temps=obj', '-c', '-o', stem + '.o', stem + '.c'])
+                    else:
+                        run(['cmoc', '--usim', '-O' + args.optimization, '-i', '-c', '-o', stem + '.o', stem + '.c'])
+                    objects.append(stem + '.o')
+                row['source_sha256'] = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
+                row['source_hashes'] = hashes
                 if args.compiler == 'llvm':
                     run(['mc6809-ld', '-T', str(ROOT / 'adapters/kr16-llvm.ld'),
-                         '-Map=' + name + '.map', '-o', name + '.elf', 'harness.o', name + '.o', *libraries])
+                         '-Map=' + name + '.map', '-o', name + '.elf', 'harness.o', *objects, *libraries])
                     run(['mc6809-objcopy', '-O', 'srec', name + '.elf', name + '.srec'])
                 else:
                     run(['lwlink', '--format=srec', '--script=' + str(ROOT / 'adapters/kr16-usim.link'),
-                         '--map=' + name + '.map', '-o', name + '.srec', 'harness.o', name + '.o', *libraries])
+                         '--map=' + name + '.map', '-o', name + '.srec', 'harness.o', *objects, *libraries])
                 output = run(['usim', name + '.srec'])
                 actual = [tuple(int(word, 16) for word in line.split()) for line in output.splitlines()]
                 expected = [(seed, reference(seed)) for seed in SEEDS]
                 row.update(status='PASS' if actual == expected else 'FAIL', output=output, expected=expected,
                            loaded_bytes=cmoc_adapter.loaded_bytes(build / (name + '.srec')))
                 if args.compiler == 'llvm':
-                    sizes = run(['mc6809-size', '-A', name + '.o'])
+                    sizes = run(['mc6809-size', '-A', *objects])
                     sections = re.findall(r'^\.text(?:\.\S+)?\s+(\d+)\s+\d+\s*$', sizes, re.M)
                     if not sections:
                         raise ValueError('No LLVM kernel text section')
                     row['kernel_code_bytes'] = sum(map(int, sections))
                 else:
                     maptext = (build / (name + '.map')).read_text()
-                    sections = re.findall(r'^Section: code \(' + re.escape(name) + r'\.o\) load at [0-9A-Fa-f]+, length ([0-9A-Fa-f]+)$', maptext, re.M)
-                    if len(sections) != 1:
-                        raise ValueError('Expected one kernel code section')
-                    row['kernel_code_bytes'] = int(sections[0], 16)
+                    total = 0
+                    for obj in objects:
+                        sections = re.findall(r'^Section: code \(' + re.escape(obj) + r'\) load at [0-9A-Fa-f]+, length ([0-9A-Fa-f]+)$', maptext, re.M)
+                        if len(sections) != 1:
+                            raise ValueError('Expected one benchmark code section per object')
+                        total += int(sections[0], 16)
+                    row['kernel_code_bytes'] = total
             except (OSError, ValueError, subprocess.SubprocessError) as error:
                 row.update(status='FAIL', error=str(error))
             report['rows'].append(row)
@@ -153,7 +166,7 @@ def main():
         print('Infrastructure error:', error)
     args.json.parent.mkdir(parents=True, exist_ok=True)
     args.json.write_text(json.dumps(report, indent=2) + '\n')
-    return 0 if len(report['rows']) == 3 and all(r['status'] == 'PASS' for r in report['rows']) else 1
+    return 0 if len(report['rows']) == len(REFERENCES) and all(r['status'] == 'PASS' for r in report['rows']) else 1
 
 
 if __name__ == '__main__':

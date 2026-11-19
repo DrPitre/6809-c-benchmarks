@@ -2,10 +2,28 @@
 import argparse
 import html
 import json
+import re
+from dataclasses import dataclass
+from urllib.parse import quote
+from shared_suite import BENCHMARKS, LABELS, PURPOSES, sources
 from pathlib import Path
 
-BENCHMARKS = ("crc16", "insertion_sort", "mix16")
+C89_BENCHMARKS = ("crc16", "insertion_sort", "mix16")
 COMPILERS = ("C3", "CMOC", "LLVM")
+
+
+@dataclass(frozen=True)
+class SourceLink:
+    label: str
+    url: str
+
+    def __str__(self):
+        return self.label
+
+
+def source_link(label, path, revision):
+    ref = revision if re.fullmatch(r"[0-9a-f]{40}", revision) else "main"
+    return SourceLink(label, "https://github.com/DrPitre/6809-c-benchmarks/blob/" + ref + "/" + quote(path, safe="/"))
 
 
 def validate_shared_sources(reports):
@@ -37,7 +55,7 @@ def render(reports):
         markdown.extend(["## " + title, ""])
         content.append("<h2>" + html.escape(title) + "</h2>")
         def mdrow(cells):
-            return "| " + " | ".join(str(c).replace("|", "\\|").replace("\n", " ") for c in cells) + " |"
+            return "| " + " | ".join(("[" + c.label + "](" + c.url + ")" if isinstance(c, SourceLink) else str(c)).replace("|", "\\|").replace("\n", " ") for c in cells) + " |"
         markdown.extend([mdrow(headers), mdrow(["---"] * len(headers))])
         markdown.extend(mdrow(row) for row in rows)
         markdown.append("")
@@ -45,6 +63,8 @@ def render(reports):
             result = []
             for column, cell in enumerate(cells):
                 value = html.escape(str(cell))
+                if isinstance(cell, SourceLink):
+                    value = '<a href="' + html.escape(cell.url, quote=True) + '">' + value + '</a>'
                 classes = []
                 if isinstance(cell, int):
                     classes.append("number")
@@ -73,7 +93,8 @@ def render(reports):
                 raise ValueError("Duplicate shared compiler configuration")
             shared[key] = row
 
-    labels = {"crc16": "CRC16", "insertion_sort": "Insertion sort", "mix16": "16-bit arithmetic"}
+    shared_revision = next((r["revision"] for r in reports if r.get("suite") == "kr16"), "local")
+    labels = {name: source_link(LABELS[name], "benchmarks/kr16/" + name + ".c", shared_revision) for name in BENCHMARKS}
     for metric, title in (("kernel_code_bytes", "Benchmark code size"),
                           ("loaded_bytes", "Complete test program size")):
         rows, highlights = [], set()
@@ -100,19 +121,28 @@ def render(reports):
                         highlights.update((len(rows), i + 2) for i in winners)
                 rows.append([labels[name], "On" if enabled else "Off", *values, difference])
         table(title, ["Benchmark", "Optimization", *COMPILERS, "Smallest"], rows, highlights)
-    paragraph("Benchmark code size measures the compiled test function alone. Complete test program size also includes compiler helpers and the test runner, so its ranking can differ. Both measure bytes loaded into memory, excluding uninitialized storage and file-format overhead. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
+    paragraph("Benchmark code size measures all test-supplied functions, including separately compiled support functions. Complete test program size also includes compiler helpers and the test runner, so its ranking can differ. Both measure bytes loaded into memory, excluding uninitialized storage and file-format overhead. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
     paragraph("Optimization on means C3's default optimizer and CMOC/LLVM -O2; off disables C3's optimizer and uses CMOC/LLVM -O0. These settings do not imply identical optimization passes.")
     statuses = []
     for name in BENCHMARKS:
         statuses.append([labels[name]] + [shared.get((name, enabled, compiler), {}).get("status", "NOT RUN")
                                          for enabled in (True, False) for compiler in COMPILERS])
     table("Shared-suite correctness", ["Benchmark"] + [compiler + " " + setting for setting in ("on", "off") for compiler in COMPILERS], statuses)
-    paragraph("PASS means all four seeds match independent reference results. The shared sort uses unsigned words and 16-bit arithmetic; it is a distinct workload from the original C89 byte sort.")
+    paragraph("PASS means all four seeds match independent reference results. Benchmark names link to the source revision used in this report. The shared sort uses unsigned words and 16-bit arithmetic; it is a distinct workload from the original C89 byte sort.")
+    content.append("<details><summary>Test purposes and source files</summary>")
+    source_rows = []
+    for name in BENCHMARKS:
+        for index, path in enumerate(sources(name)):
+            source_rows.append([LABELS[name], PURPOSES[name] if index == 0 else "Separately compiled supporting function",
+                                source_link(path, "benchmarks/kr16/" + path, shared_revision)])
+    table("Test sources", ["Benchmark", "What it exercises", "Source"], source_rows)
+    content.append("</details>")
     content.append("<details><summary>Compiler versions, original-suite results, and measurement details</summary>")
 
     for group, title in (("kr16", "Shared kr16: compiler versions and runtime correctness"),
                          ("c89", "Original C89: 6809 correctness"), ("host", "Host correctness")):
         rows = []
+        names = BENCHMARKS if group == "kr16" else C89_BENCHMARKS
         for report in reports:
             if report.get("kind") == "compile-compatibility":
                 continue
@@ -121,8 +151,8 @@ def render(reports):
                 continue
             statuses = {r["benchmark"]: r["status"] for r in report["rows"]}
             rows.append([report.get("version", report["compiler"]), report.get("target", "Host"), report["flags"]] +
-                        [statuses.get(name, "NOT RUN") for name in BENCHMARKS])
-        table(title, ["Compiler", "Target", "Flags", *BENCHMARKS], rows)
+                        [statuses.get(name, "NOT RUN") for name in names])
+        table(title, ["Compiler", "Target", "Flags", *names], rows)
     paragraph("The shared kr16 suite uses identical K&R-compatible source for C3, CMOC, and LLVM, 16-bit unsigned arithmetic, and one bare-metal harness. Its sort stores values in unsigned words; the original C89 sort uses bytes and 32-bit arithmetic. Compare sizes within a suite, not between suites.")
     sizes = []
     for report in reports:
@@ -130,7 +160,7 @@ def render(reports):
             continue
         for row in report["rows"]:
             valid = row["status"] == "PASS"
-            sizes.append([report.get("suite", "c89"), report.get("version", report["compiler"]), report["flags"], row["benchmark"],
+            sizes.append([report.get("suite", "c89"), report.get("version", report["compiler"]), report["flags"], source_link(LABELS.get(row["benchmark"], row["benchmark"]), ("benchmarks/kr16/" if report.get("suite") == "kr16" else "benchmarks/") + row["benchmark"] + ".c", report["revision"]),
                           row.get("kernel_code_bytes", "Unavailable") if valid else "Excluded (FAIL)",
                           row.get("loaded_bytes", "Unavailable") if valid else "Excluded (FAIL)", "Not measured"])
     table("6809 sizes (bytes)", ["Suite", "Compiler", "Flags", "Benchmark", "Benchmark code", "Complete test program", "Cycles"], sizes)
@@ -144,11 +174,11 @@ def render(reports):
         for report in compatibility:
             statuses = {r["benchmark"]: r["status"] for r in report["rows"]}
             rows.append([report.get("version", report["compiler"]), report["target"], report["flags"],
-                         report.get("smoke_link", "ERROR")] + [statuses.get(name, "NOT RUN") for name in BENCHMARKS])
+                         report.get("smoke_link", "ERROR")] + [statuses.get(name, "NOT RUN") for name in C89_BENCHMARKS])
             probes.extend([report["version"], report["flags"], p["name"], p["status"]]
                           for p in report.get("probes", []))
         table("C3 compile compatibility (not executed)",
-              ["Compiler", "Target", "Flags", "Smoke link", *BENCHMARKS], rows)
+              ["Compiler", "Target", "Flags", "Smoke link", *C89_BENCHMARKS], rows)
         table("C3 language probes", ["Compiler", "Flags", "Feature", "Compile result"], probes)
         paragraph("C3 is tested against the unchanged C89 benchmark functions. COMPILE FAIL is an observed compatibility result, not a failed runtime checksum. ACCEPTED probes were compiled, not executed. C3 currently lacks limits.h and rejects unsigned short, unsigned long, and U-suffixed constants. These limitations apply to the original C89 suite; the shared kr16 results above execute real C3-generated code.")
         paragraph("The original compatibility check records rejections; the shared kr16 runtime check requires passing checksums. Infrastructure failures still fail CI. Full diagnostics are included in the raw JSON and workflow artifacts.")
@@ -159,7 +189,7 @@ def render(reports):
     document = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
                 '<title>6809 compiler matrix</title><style>body{font:16px/1.55 system-ui;margin:2rem auto;padding:0 1.25rem;max-width:72rem;color:#172b3a;background:#f8fafc}h1{line-height:1.15}h2{margin-top:2rem;font-size:1.25rem}'
-                'table{border-collapse:collapse;width:100%;background:white}th,td{border-bottom:1px solid #dbe3eb;padding:.65rem .8rem;text-align:left;white-space:nowrap}th{background:#eaf0f6;font-size:.9rem}.number{font-variant-numeric:tabular-nums;text-align:right}.smaller{background:#e0f2e9;color:#15583a}.pass{color:#15583a}tbody tr:nth-child(2n){border-bottom:2px solid #bccbd8}'
+                'table{border-collapse:collapse;width:100%;background:white}th,td{border-bottom:1px solid #dbe3eb;padding:.65rem .8rem;text-align:left;white-space:nowrap}th{background:#eaf0f6;font-size:.9rem}td:nth-child(2){white-space:normal}.number{font-variant-numeric:tabular-nums;text-align:right}.smaller{background:#e0f2e9;color:#15583a}.pass{color:#15583a}tbody tr:nth-child(2n){border-bottom:2px solid #bccbd8}'
                 '.scroll{overflow:auto;border:1px solid #dbe3eb;border-radius:8px}p{max-width:65rem}details{margin:1.5rem 0;padding:1rem;background:white;border:1px solid #dbe3eb;border-radius:8px}summary{cursor:pointer;font-weight:600}a{color:#145daa}@media(max-width:600px){body{margin:1rem auto;padding:0 .75rem}th,td{padding:.5rem}} </style></head><body>' + "".join(content) + '</body></html>')
     return "\n".join(markdown), document
 

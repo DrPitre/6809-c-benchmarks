@@ -14,6 +14,7 @@
         endc
         endc
         export _stkcheck
+        export _rpterr
 start
         lds #$fe00
         ldy #0
@@ -79,4 +80,8 @@ digit
 ; the bounded kernels use well under the reserved 4 KiB stack region.
 _stkcheck
         rts
+; Runtime arithmetic errors (such as division by zero) must fail the run.
+_rpterr
+        ldd #1
+        sync
         endsection

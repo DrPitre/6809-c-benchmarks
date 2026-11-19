@@ -41,3 +41,9 @@ release 1.0. The harness is translated from the common assembly source to
 LLVM directive syntax; the `LLVM_ABI` branch transfers the seed/result via X.
 Its 24-byte direct-page register area follows the release's picolibc linker
 layout. No operating-system startup or library runner is linked.
+
+The shared inventory includes separately compiled call and recursion support
+functions. The adapter links all test objects and includes their code in the
+benchmark-code metric. C3's `_rpterr` hook terminates the simulator with a
+nonzero result. LLVM can emit C-library calls such as `memmove`; referenced
+picolibc routines are linked and counted in complete-program size.
