@@ -185,8 +185,8 @@ return value through X, then prints the returned 16-bit checksum.
 It loads at $2800 with stack top $FE00 and a reserved 4 KiB stack region; these
 bounded benchmark functions use no static storage. C3's `_stkcheck` calls use a no-op stub,
 so this is a bare-metal benchmark function comparison, not an OS-9 runtime comparison.
-Only referenced compiler helper routines are linked. Benchmark code size excludes
-those helpers; complete test program size includes them and the common harness.
+Only referenced compiler helper routines are linked. Ranked code size includes
+those helpers and excludes the common harness; complete size includes both.
 
 ## LLVM-MC6809 release 1.0
 
@@ -220,8 +220,9 @@ register. This adds four bytes of register-transfer instructions to the
 loaded harness; the benchmark function code metric excludes it. LLVM reserves 24 bytes
 of direct-page scratch registers, mapped at $0000–$0017; those RAM bytes are
 not counted as loaded code. ELF files, generated assembly, maps, and version
-banners are retained in CI artifacts. Benchmark code size sums the benchmark and supporting
-objects' `.text` sections, excluding metadata, helpers, and ELF headers.
+banners are retained in CI artifacts. Ranked code size counts loaded benchmark,
+support, and runtime-helper bytes, including constants and initialized data,
+minus the measured harness. It excludes BSS, metadata, and ELF headers.
 
 `-O2` is a general optimization setting, not a size-minimizing setting. LLVM
 unrolls the CRC loop at `-O2`, so its code can be larger than at `-O0`.
@@ -255,8 +256,7 @@ GCD uses Python's `math.gcd`; the pointer tests use Python sequences and
 index arithmetic rather than reproducing C pointer operations.
 
 Supporting functions are compiled separately without LTO. Their code counts
-as benchmark code, while compiler/library helpers count only toward complete
-program size. Report hashes cover every source file for a test. The runtime
+toward ranked code size along with linked compiler/library helpers. Report hashes cover every source file for a test. The runtime
 error hook stops USIM with a nonzero status if a C3 arithmetic helper reports
 an error; it does not silently return success.
 
@@ -295,9 +295,9 @@ mask selected by `vc -O2`). Sources are compiled separately without whole-progra
 optimization. Both configurations use vasm's standard branch and offset relaxation.
 The same USIM harness passes the first argument and result in D. vlink emits
 S-records at address `$2800`; only referenced helpers from the supplied `libvc.a`
-are linked. Benchmark code counts the linked `.text` sections of test objects,
-including separately compiled support functions; complete program size includes
-harness and runtime helpers. These are bare-metal USIM binaries, not OS-9 modules.
+are linked. Ranked code size includes test objects, supporting functions, and
+linked runtime helpers, excluding the measured harness. Complete program size
+adds the harness back in. These are bare-metal USIM binaries, not OS-9 modules.
 
 For native macOS testing, build `vbcchc12` with `TARGET=hc12` from the bundled
 `vbcc.tar.gz`, and `vasm6809_std` with `CPU=6809 SYNTAX=std` from `vasm.tar.gz`.
@@ -321,7 +321,15 @@ weight; scores are then scaled so the leading compiler has an index of 100.
 An index of 120 means a geometric-mean size ratio 20% above the leader.
 Ties share a place at two-decimal precision. Total bytes and full-suite pass
 counts appear alongside the score; exclusions are listed for each setting.
-This ranking excludes runtime helpers and the harness and describes this
+Ranked `code_bytes` is the unique loaded S-record byte count minus the exact
+harness range (`start` to `harness_end`) measured from each linker map. This
+includes all linked runtime helpers, constants, and initialized data, while
+excluding the harness and BSS. `harness_bytes` records the subtraction;
+`kernel_code_bytes` retains the older test-object-only number for diagnostics
+and is no longer used for shared-suite rankings. Original C89 detail rows keep
+their explicitly labeled historical function-only metric and are not ranked.
+For example, optimized LLVM `mul16` scores 73 bytes: 39 for the function plus
+34 for `__mulhi3`, excluding its 113-byte harness. This ranking describes this
 benchmark suite, not general compiler correctness or all C workloads.
 
 
@@ -363,7 +371,7 @@ Each page includes all test compilation units (including support functions),
 compiler version, source revision, and linker map. C3's optimized view retains the
 output of `c3optx`; the other compilers retain their `.s` assembler inputs.
 These pages contain compiler output rather than a disassembly of linked library
-helpers. The linker map identifies those helpers contributing to complete size.
+helpers. The linker map identifies those helpers included in the ranked size.
 
 Assembly and maps travel in the report JSON, so GitHub Pages publishes them with
 the matching measurements; they do not depend on the retention of Actions artifacts.

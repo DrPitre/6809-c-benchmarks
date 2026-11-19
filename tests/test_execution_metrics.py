@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from execution_metrics import boundary_address, instruction_counts
+from execution_metrics import boundary_address, instruction_counts, code_size_without_harness
 
 
 class ExecutionMetricsTests(unittest.TestCase):
@@ -17,6 +17,12 @@ class ExecutionMetricsTests(unittest.TestCase):
             boundary_address('', 'bench_begin')
         with self.assertRaises(ValueError):
             boundary_address(maps[0] + '\n' + maps[0], 'bench_begin')
+
+    def test_runtime_helpers_are_counted_but_harness_is_not(self):
+        text = 'Symbol: start (harness.o) = 2800\nSymbol: harness_end (harness.o) = 2871'
+        self.assertEqual(code_size_without_harness(text, 186), (73, 113))
+        with self.assertRaises(ValueError):
+            code_size_without_harness(text, 100)
 
     def test_counts_require_every_seed_and_preserve_order(self):
         self.assertEqual(instruction_counts('BENCH_INSTRUCTIONS 11\nBENCH_INSTRUCTIONS 20\n', [0, 65535]),

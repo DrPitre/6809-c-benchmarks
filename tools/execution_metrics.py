@@ -19,3 +19,13 @@ def instruction_counts(stderr, seeds):
     if len(counts) != len(seeds) or any(n <= 0 for n in counts):
         raise ValueError('Missing or incomplete USIM instruction counts')
     return [{'seed': seed, 'instructions': count} for seed, count in zip(seeds, counts)]
+
+
+def code_size_without_harness(maptext, loaded_bytes):
+    """Count loaded benchmark/helper bytes, excluding the exact harness range."""
+    start = boundary_address(maptext, 'start')
+    end = boundary_address(maptext, 'harness_end')
+    harness_bytes = end - start
+    if harness_bytes <= 0 or loaded_bytes <= harness_bytes:
+        raise ValueError('Invalid harness or loaded size')
+    return loaded_bytes - harness_bytes, harness_bytes

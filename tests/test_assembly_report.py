@@ -11,14 +11,14 @@ from matrix import render
 class AssemblyReportTests(unittest.TestCase):
     def test_links_publish_exact_assembly_and_support_files_safely(self):
         row = {'benchmark': 'calls16', 'status': 'PASS', 'source_sha256': 'same',
-               'kernel_code_bytes': 100, 'loaded_bytes': 200,
+               'kernel_code_bytes': 100, 'code_bytes': 134, 'loaded_bytes': 200,
                'assembly': {'calls16.s': 'lda #1 ; <script>', 'step3.s': 'rts'},
                'linker_map': 'calls16.o .text 100'}
         report = {'compiler': 'CMOC', 'suite': 'kr16', 'flags': '-O2',
                   'target': '6809 / USIM bare-metal', 'revision': 'a' * 40, 'rows': [row]}
         url = assembly_url(report, row)
         markdown, document = render([report])
-        self.assertIn('[100](' + url + ')', markdown)
+        self.assertIn('[134](' + url + ')', markdown)
         self.assertIn('href="' + url + '">200</a>', document)
         self.assertIn('class="number"><a', document)
         self.assertEqual(url, assembly_url(dict(report, compiler='C3', flags='optimizer on'), row))
@@ -35,4 +35,4 @@ class AssemblyReportTests(unittest.TestCase):
             self.assertIn('a' * 40, page)
         row['status'] = 'FAIL'
         markdown, _ = render([report])
-        self.assertNotIn('[100](', markdown)
+        self.assertNotIn('[134](', markdown)

@@ -66,7 +66,7 @@ def publish_assembly(reports, output):
                  '<style>body{font:15px/1.5 system-ui;margin:1.5rem;color:#172b3a;background:#f8fafc}a{color:#145daa}.scroll{overflow:auto}table{border-collapse:collapse;table-layout:fixed;width:100%;min-width:1120px}th,td{width:25%;padding:.65rem;vertical-align:top;text-align:left;border:1px solid #cbd5e1;background:white}th{background:#eaf0f6;font-size:1.2rem}th small{display:block;font-size:.8rem;font-weight:400;overflow-wrap:anywhere}.file-heading th{font-size:1rem;background:#dce7f1}pre{height:32rem;overflow:auto;margin:.5rem 0 0;padding:.7rem;background:#f1f5f9;font:12px/1.5 ui-monospace,monospace;tab-size:4}.pass{color:#14532d;font-weight:700}.fail{color:#b91c1c;font-weight:700}.revision{overflow-wrap:anywhere;font-size:.8rem}details pre{height:20rem}h1{font-size:1.6rem}</style>',
                  '<a href="../index.html">← Back to comparison</a>', '<h1>' + html.escape(title) + '</h1>',
                  '<p>All four compiler outputs for this benchmark row. Each source file is aligned across columns; scroll within a pane to read its assembly. On smaller screens, scroll the table horizontally.</p>',
-                 '<p>Code sizes include test support functions. Complete program sizes also include the harness and runtime helpers. Library helper assembly is not included here; linker maps are below.</p>',
+                 '<p>Code sizes include test support functions, linked runtime helpers, constants, and initialized data, excluding only the measured test harness. Complete program sizes also include the harness. Library helper assembly is not included here; linker maps are below.</p>',
                  '<div class="scroll"><table><thead><tr>']
         for compiler in COMPILERS:
             report, row = entries.get(compiler, ({}, {}))
@@ -77,7 +77,7 @@ def publish_assembly(reports, output):
             status = row.get('status', 'NOT RUN')
             parts.append('<td><span class="' + ('pass' if status == 'PASS' else 'fail') + '">' + html.escape(status) + '</span>')
             if status == 'PASS':
-                parts.append('<p>Code: ' + str(row.get('kernel_code_bytes', 'Unavailable')) + ' B<br>Complete: ' + str(row.get('loaded_bytes', 'Unavailable')) + ' B</p>')
+                parts.append('<p>Code: ' + str(row.get('code_bytes', 'Unavailable')) + ' B<br>Complete: ' + str(row.get('loaded_bytes', 'Unavailable')) + ' B</p>')
             else:
                 parts.append('<p>' + html.escape(row.get('error', 'No result available')) + '</p>')
             parts.append('<p class="revision">Source revision: ' + html.escape(report.get('revision', 'Unavailable')) + '</p></td>')

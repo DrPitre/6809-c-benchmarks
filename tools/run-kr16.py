@@ -9,7 +9,7 @@ import re
 import shutil
 import subprocess
 
-from execution_metrics import boundary_address, instruction_counts
+from execution_metrics import boundary_address, instruction_counts, code_size_without_harness
 from check import SEEDS
 from shared_suite import REFERENCES, sources
 
@@ -206,6 +206,7 @@ def main():
                 if actual != expected:
                     row.update(error='Checksum mismatch', failure_stage='verification')
                 phase = 'size measurement'
+                row['code_bytes'], row['harness_bytes'] = code_size_without_harness(maptext, row['loaded_bytes'])
                 if args.compiler == 'vbcc':
                     total = 0
                     for obj in objects:

@@ -67,14 +67,14 @@ class ReportTests(unittest.TestCase):
                             "flags": "optimizer on" if compiler == "C3" else "-O2",
                             "rows": [{"benchmark": "crc16", "status": "PASS",
                                       "source_sha256": "same", "loaded_bytes": size,
-                                      "kernel_code_bytes": size}]})
+                                      "code_bytes": size}]})
         markdown, document = render(reports)
         self.assertIn('rank rank-1', document)
         self.assertIn('rank rank-4', document)
         self.assertIn("| On | 467 | 374 | 430 | 480 | CMOC by 56 B |", markdown)
-        reports[-1]["rows"][0]["kernel_code_bytes"] = 374
+        reports[-1]["rows"][0]["code_bytes"] = 374
         _, tied = render(reports)
-        first_table = tied.split('<h2>Benchmark code size</h2>')[1].split('</table>')[0]
+        first_table = tied.split('<h2>Code size including runtime helpers</h2>')[1].split('</table>')[0]
         self.assertEqual(first_table.count('rank rank-1'), 2)
         self.assertNotIn('rank rank-2', first_table)
         reports[-1]["rows"][0]["status"] = "FAIL"
@@ -86,7 +86,7 @@ class ReportTests(unittest.TestCase):
         shared = {}
         for name, sizes in (("crc16", (10, 20, 10, 40)), ("mix16", (1000, 1000, 1000, 2000))):
             for compiler, size in zip(("C3", "CMOC", "LLVM", "VBCC"), sizes):
-                shared[name, True, compiler] = {"status": "PASS", "kernel_code_bytes": size}
+                shared[name, True, compiler] = {"status": "PASS", "code_bytes": size}
         rows, included = overall_sizes(shared, True)
         self.assertEqual(len(included), 2)
         self.assertEqual([(r[0], r[1], r[2]) for r in rows],
@@ -109,7 +109,7 @@ class ReportTests(unittest.TestCase):
         self.assertIn('/blob/' + revision + '/benchmarks/kr16/support/step3.c', document)
         self.assertIn('[calls16.c](' + link.url + ')', markdown)
         # Each comparison table has one linked name spanning both settings.
-        for title in ('Benchmark code size', 'Complete test program size', 'Shared-suite correctness'):
+        for title in ('Code size including runtime helpers', 'Complete test program size', 'Shared-suite correctness'):
             section = document.split('<h2>' + title + '</h2>')[1].split('</table>')[0]
             self.assertEqual(section.count('href="' + link.url + '"'), 1)
             self.assertIn('rowspan="2" scope="rowgroup"', section)

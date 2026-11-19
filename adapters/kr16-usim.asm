@@ -6,6 +6,7 @@
         section start
         export start
         export bench_begin
+        export harness_end
         export bench_end
         ifdef LLVM_ABI
         import bench_run
@@ -97,4 +98,5 @@ _stkcheck
 _rpterr
         ldd #1
         sync
+harness_end
         endsection

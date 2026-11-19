@@ -50,7 +50,7 @@ def overall_sizes(shared, enabled):
     for name in BENCHMARKS:
         results = [shared.get((name, enabled, compiler), {}) for compiler in COMPILERS]
         if all(row.get("status") == "PASS" and
-               type(row.get("kernel_code_bytes")) is int and row["kernel_code_bytes"] > 0
+               type(row.get("code_bytes")) is int and row["code_bytes"] > 0
                for row in results):
             eligible.append(name)
     if not eligible:
@@ -61,8 +61,8 @@ def overall_sizes(shared, enabled):
         ratios = []
         totals[compiler] = 0
         for name in eligible:
-            size = shared[name, enabled, compiler]["kernel_code_bytes"]
-            best = min(shared[name, enabled, other]["kernel_code_bytes"] for other in COMPILERS)
+            size = shared[name, enabled, compiler]["code_bytes"]
+            best = min(shared[name, enabled, other]["code_bytes"] for other in COMPILERS)
             ratios.append(math.log(size / best))
             totals[compiler] += size
         scores[compiler] = math.exp(sum(ratios) / len(ratios))
@@ -170,11 +170,11 @@ def render(reports):
             assembly_links[key] = assembly_url(report, row)
 
     content.append('<section class="versions">')
-    paragraph("Overall compiler ranking by benchmark code size. Lower is better; the leading compiler scores 100. Each test has equal weight through the geometric mean of relative sizes. Only tests with valid sizes and passing results from all four compilers enter the ranking. This measures this suite, not all possible C programs; runtime helpers and the harness are excluded.")
+    paragraph("Overall compiler ranking by benchmark code size. Lower is better; the leading compiler scores 100. Each test has equal weight through the geometric mean of relative sizes. Only tests with valid sizes and passing results from all four compilers enter the ranking. This measures this suite, not all possible C programs; linked runtime helpers, constants, and initialized data are included; only the test harness and uninitialized storage are excluded.")
     for enabled in (True, False):
         ranking, eligible = overall_sizes(shared, enabled)
         table("Overall code-size ranking — optimization " + ("on" if enabled else "off"),
-              ["Place", "Compiler", "Relative size index", "Total benchmark bytes", "Suite passes"], ranking,
+              ["Place", "Compiler", "Relative size index", "Total code + helpers (B)", "Suite passes"], ranking,
               highlights={(i, 2) for i, row in enumerate(ranking) if row[0] == "1st"})
         excluded = [LABELS[name] for name in BENCHMARKS if name not in eligible]
         paragraph(str(len(eligible)) + "/" + str(len(BENCHMARKS)) + " tests included. " +
@@ -184,7 +184,7 @@ def render(reports):
 
     shared_revision = next((r["revision"] for r in reports if r.get("suite") == "kr16"), "local")
     labels = {name: source_link(LABELS[name], "benchmarks/kr16/" + name + ".c", shared_revision) for name in BENCHMARKS}
-    for metric, title in (("kernel_code_bytes", "Benchmark code size"),
+    for metric, title in (("code_bytes", "Code size including runtime helpers"),
                           ("loaded_bytes", "Complete test program size"),
                           ("instructions", "Executed instructions (four seeds)")):
         rows, highlights, ranks = [], set(), {}
@@ -219,7 +219,7 @@ def render(reports):
         table(title, ["Benchmark", "Optimization", *COMPILERS, "Smallest"], rows, highlights, grouped=True, ranks=ranks)
         if metric == "instructions":
             paragraph("Instruction counts sum the four seeds and include the benchmark call/return, ABI register transfers, supporting functions, and linked runtime helpers. Startup, seed loading, result printing, and stack cleanup in the harness are excluded. Prefixed 6809 opcodes count as one instruction. Counts are not CPU cycles: instructions have different costs. Failed results are excluded; per-seed counts remain in the raw JSON and workflow artifacts.")
-    paragraph("Benchmark code size measures all test-supplied functions, including separately compiled support functions. Complete test program size also includes compiler helpers and the test runner, so its ranking can differ. Both measure bytes loaded into memory, excluding uninitialized storage and file-format overhead. Badges rank each complete four-compiler row by its metric (1st is lowest); ties share a place. Rows with failed or missing results have no ranking. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
+    paragraph("Ranked code size includes the benchmark, supporting functions, linked runtime helpers, constants, and initialized data. It is the complete loaded size minus the measured harness size. Complete test program size adds the test harness back in. Both measure bytes loaded into memory, excluding uninitialized storage and file-format overhead. Badges rank each complete four-compiler row by its metric (1st is lowest); ties share a place. Rows with failed or missing results have no ranking. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
     paragraph("Optimization on means C3's default optimizer and CMOC/LLVM -O2 plus vbcc -O=1023 (vc -O2); off disables C3's optimizer and uses CMOC/LLVM -O0 and vbcc -O=0. vbcc uses its standard assembler branch/offset relaxation at both settings. These settings do not imply identical optimization passes.")
     statuses = []
     for name in BENCHMARKS:
@@ -282,14 +282,14 @@ def render(reports):
             continue
         for row in report["rows"]:
             valid = row["status"] == "PASS"
-            sizes.append([source_link(("Shared 16-bit suite" if report.get("suite") == "kr16" else "Original C89") + ": " + LABELS.get(row["benchmark"], row["benchmark"]),
+            sizes.append([source_link(("Shared 16-bit suite" if report.get("suite") == "kr16" else "Original C89 (function only)") + ": " + LABELS.get(row["benchmark"], row["benchmark"]),
                                       ("benchmarks/kr16/" if report.get("suite") == "kr16" else "benchmarks/") + row["benchmark"] + ".c", report["revision"]),
                           report.get("version", report["compiler"]), report["flags"],
-                          linked_size(report, row, "kernel_code_bytes"),
+                          linked_size(report, row, "code_bytes" if report.get("suite") == "kr16" else "kernel_code_bytes"),
                           linked_size(report, row, "loaded_bytes"),
                           row.get("instructions", "Not measured") if valid else "Excluded (FAIL)"])
-    table("6809 sizes (bytes)", ["Benchmark", "Compiler", "Flags", "Benchmark code", "Complete test program", "Instructions"], sorted(sizes, key=lambda row: str(row[0])), grouped=True)
-    paragraph("Benchmark code excludes compiler helper routines. Complete test program size includes the test runner and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The shared-suite harness passes each seed in D and on the stack for C3/CMOC; LLVM's branch moves the argument and result through X. LLVM reserves 24 bytes of direct-page register scratch RAM, excluded from complete test program bytes. Its release is pinned to 1.0, with plain 6809 code, -std=c89, -fno-pie, and no LTO. C3 stack-check calls use a no-op stub; these bounded benchmark functions have a reserved 4 KiB stack and no static storage. These are bare-metal benchmark tests, not OS-9 application tests.")
+    table("6809 sizes (bytes)", ["Benchmark", "Compiler", "Flags", "Code + helpers¹", "Complete test program", "Instructions"], sorted(sizes, key=lambda row: str(row[0])), grouped=True)
+    paragraph("Shared-suite code sizes include linked runtime helpers and exclude the measured harness. ¹ Original C89 rows retain their historical function-only measurement and do not enter the shared-suite rankings. Complete test program size includes the test runner and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The shared-suite harness passes each seed in D and on the stack for C3/CMOC; LLVM's branch moves the argument and result through X. LLVM reserves 24 bytes of direct-page register scratch RAM, excluded from complete test program bytes. Its release is pinned to 1.0, with plain 6809 code, -std=c89, -fno-pie, and no LTO. C3 stack-check calls use a no-op stub; these bounded benchmark functions have a reserved 4 KiB stack and no static storage. These are bare-metal benchmark tests, not OS-9 application tests.")
     content.append("</details>")
     compatibility = [r for r in reports if r.get("kind") == "compile-compatibility"]
     if compatibility:
