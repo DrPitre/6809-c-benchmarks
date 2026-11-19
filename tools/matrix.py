@@ -94,6 +94,20 @@ def render(reports):
                        "</thead><tbody>" + "".join(tr(r, "td", i) for i, r in enumerate(rows)) + "</tbody></table></div>")
 
     paragraph("C3, CMOC, LLVM-MC6809, and vbcc, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes; lower is smaller. Timing is not measured.")
+    content.append('<section class="versions">')
+    versions = []
+    for compiler in COMPILERS:
+        seen = set()
+        for report in reports:
+            if report.get("suite") != "kr16" or report["compiler"].upper() != compiler:
+                continue
+            version = report.get("version", "Unavailable")
+            release = report.get("release", report.get("toolchain_revision", "—"))
+            if (version, release) not in seen:
+                versions.append([compiler, version, release])
+                seen.add((version, release))
+    table("Compiler versions tested", ["Compiler", "Reported version", "Release / revision"], versions)
+    content.append('</section>')
     shared = {}
     for report in reports:
         if report.get("suite") != "kr16":
@@ -224,7 +238,7 @@ def render(reports):
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
                 '<title>6809 compiler matrix</title><style>body{font:16px/1.55 system-ui;margin:2rem auto;padding:0 1.25rem;max-width:72rem;color:#172b3a;background:#f8fafc}h1{line-height:1.15}h2{margin-top:2rem;font-size:1.25rem}'
                 'table{border-collapse:collapse;width:100%;background:white}th,td{border-bottom:1px solid #dbe3eb;padding:.65rem .8rem;text-align:left;white-space:nowrap}th{background:#eaf0f6;font-size:.9rem}td:nth-child(2){white-space:normal}.number{font-variant-numeric:tabular-nums;text-align:right}.smaller{background:#e0f2e9;color:#15583a}.pass{color:#14532d;background:#dcfce7;font-weight:700}.fail{color:#b91c1c;background:#fee2e2;font-weight:700}tr.group-start{border-top:2px solid #bccbd8}tbody th[scope=rowgroup]{vertical-align:middle;background:#f0f5fa;font-size:1rem}tbody th a{white-space:normal}'
-                '.scroll{overflow:auto;border:1px solid #dbe3eb;border-radius:8px}p{max-width:65rem}details{margin:1.5rem 0;padding:1rem;background:white;border:1px solid #dbe3eb;border-radius:8px}summary{cursor:pointer;font-weight:600}a{color:#145daa}@media(max-width:600px){body{margin:1rem auto;padding:0 .75rem}th,td{padding:.5rem}} </style></head><body>' + "".join(content) + '</body></html>')
+                '.versions{padding:1rem;background:#eaf0f6;border:1px solid #bccbd8;border-radius:8px;margin:1.5rem 0}.versions h2{margin-top:0}.versions td{white-space:normal;overflow-wrap:anywhere}.versions td:first-child{font-weight:700}.scroll{overflow:auto;border:1px solid #dbe3eb;border-radius:8px}p{max-width:65rem}details{margin:1.5rem 0;padding:1rem;background:white;border:1px solid #dbe3eb;border-radius:8px}summary{cursor:pointer;font-weight:600}a{color:#145daa}@media(max-width:600px){body{margin:1rem auto;padding:0 .75rem}th,td{padding:.5rem}} </style></head><body>' + "".join(content) + '</body></html>')
     return "\n".join(markdown), document
 
 
