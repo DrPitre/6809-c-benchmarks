@@ -7,9 +7,10 @@ extensions belong in separately labeled comparisons.
 
 ## Current status
 
-Three C89 kernels and a host correctness runner are implemented. No 6809
-compiler adapter or performance results are included yet. Host runs validate
-semantics only: they do not establish 6809 compatibility, speed, or code size.
+Three C89 kernels run on the host and on an emulated Motorola 6809 using
+CMOC 0.1.99 and its bundled USIM simulator. CI publishes correctness and
+6809 code/program sizes at `-O0` and `-O2`. Cycle timing and additional 6809
+compilers are not implemented yet. Host results remain a separate sanity check.
 
 ## Run the checks
 
@@ -36,10 +37,10 @@ may be 16 or 32 bits. Historical dialect limitations should be recorded explicit
 
 ## GitHub Actions
 
-The included workflow runs `make check` on pushes, pull requests, and manual
-runs, using GCC and Clang at both `-O0` and `-O2`. These jobs validate host
-correctness. Actual 6809 measurements will require installing a target compiler
-and emulator in CI, with pinned versions and reproducible configurations.
+The workflow builds and checks kernels on pushes, pull requests, and manual
+runs using host GCC/Clang and 6809 CMOC, each at `-O0` and `-O2`. CMOC 0.1.99
+and LWTOOLS 4.24 are built from SHA-256-verified release archives. USIM is
+built from the CMOC release. All six reports feed the published matrix.
 
 ## Comparison rules
 
@@ -67,9 +68,9 @@ are not bundled.
 CI collects JSON results from every compiler/optimization job and generates a
 benchmark-by-compiler matrix. Failed checks remain visible as FAIL; missing
 report artifacts block publication. Every run includes a job summary and a
-downloadable `benchmark-matrix` artifact. Main-branch runs deploy the HTML and
-Markdown report to GitHub Pages. Enable **Settings → Pages → Build and deployment
-→ Source → GitHub Actions** after publishing this repository to GitHub.
+downloadable `benchmark-matrix` artifact. Main-branch runs deploy the HTML, Markdown, and JSON report to the
+[live matrix](https://drpitre.github.io/6809-c-benchmarks/). Pages is enabled
+for this repository; forks should select GitHub Actions as their Pages source.
 
 The deployment follows the [GitHub Pages custom workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
@@ -83,3 +84,35 @@ python3 tools/matrix.py build/reports build/site
 
 Open `build/site/index.html`. Local results describe only the compiler and flags
 you actually used; set the metadata variables accordingly.
+
+## Run the 6809 adapter
+
+On Ubuntu, install `build-essential bison flex curl python3`, then:
+
+```sh
+sh tools/build-cmoc.sh
+export PATH="$PWD/build/toolchain/bin:$PATH"
+python3 tools/run-cmoc.py --optimization 0 --json build/reports/cmoc-O0.json
+python3 tools/run-cmoc.py --optimization 2 --json build/reports/cmoc-O2.json
+python3 tools/matrix.py build/reports build/site
+```
+
+The build stays under `build/`. `CMOC` and `USIM` may override executable paths
+for an existing installation; LWTOOLS must also be on PATH. Each kernel and
+runner are compiled separately. Each run has a 60-second timeout. Reports
+include compiler/assembler/linker versions, exact command arguments, checksums,
+and sizes. CI retains assembly, S-record executables, maps, and command logs.
+
+CMOC has no `limits.h`; `bench.h` uses its documented 8-bit-byte data model
+and a compile-time short-size check. The benchmark algorithms are unchanged.
+The USIM adapter uses CMOC's `cmoc.h` for output.
+
+Kernel code size is the kernel object's `code` section, excluding linked
+helpers. Loaded program size counts unique S-record data bytes, including
+startup, runner, initialized data, and linked runtime, but excluding BSS and
+S-record text overhead. These metrics are distinct and are not standalone
+kernel footprint measurements. Timing is not measured by this adapter.
+
+The CMOC archive uses the author's HTTP hosting address; its pinned SHA-256
+must match before extraction. The digest was also checked against a preexisting
+local release archive. LWTOOLS is downloaded over HTTPS.

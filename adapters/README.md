@@ -1,6 +1,10 @@
 # Compiler and execution adapters
 
-`host.c` is a correctness-only runner. A future target adapter should:
+`host.c` is a host correctness runner. `cmoc-usim.c` runs the same seed set
+using CMOC output routines on USIM. `tools/run-cmoc.py` builds it and collects
+correctness and sizes; `tools/build-cmoc.sh` builds pinned dependencies.
+
+Additional target adapters should:
 
 1. Document toolchain installation prerequisites and supported C dialect.
 2. Compile each unchanged kernel separately from its platform runner.

@@ -30,8 +30,37 @@ jobs:
           path: reports/*.json
           if-no-files-found: error
 
+  cmoc:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        optimization: ["0", "2"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y build-essential bison flex curl
+      - name: Build pinned CMOC, LWTOOLS, and USIM
+        run: sh tools/build-cmoc.sh
+      - name: Run 6809 checks and record sizes
+        if: always()
+        run: |
+          export PATH="$PWD/build/toolchain/bin:$PATH"
+          python3 tools/run-cmoc.py --optimization ${{ matrix.optimization }} --json reports/cmoc-O${{ matrix.optimization }}.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: report-cmoc-O${{ matrix.optimization }}
+          path: reports/*.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cmoc-evidence-O${{ matrix.optimization }}
+          path: build/cmoc-O${{ matrix.optimization }}/
+
   matrix:
-    needs: check
+    needs: [check, cmoc]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -41,9 +70,11 @@ jobs:
           pattern: report-*
           merge-multiple: true
           path: reports
+      - name: Verify report handling
+        run: python3 -m unittest discover -s tests
       - name: Generate matrix
         run: |
-          python3 tools/matrix.py reports build/site --expected-reports 4
+          python3 tools/matrix.py reports build/site --expected-reports 6
           cat build/site/matrix.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
