@@ -81,8 +81,8 @@ def overall_sizes(shared, enabled):
 
 def render(reports):
     validate_shared_sources(reports)
-    markdown = ["# 6809 C compiler benchmark matrix", ""]
-    content = ["<h1>6809 C compiler benchmark matrix</h1>"]
+    markdown = ["# The Grand 6809 C Compiler Bake-Off!", ""]
+    content = ["<h1>The Grand 6809 C Compiler Bake-Off!</h1>"]
     repository = "https://github.com/DrPitre/6809-c-benchmarks"
     markdown.extend(["[View repository on GitHub](" + repository + ")", ""])
     content.append('<p><a href="' + repository + '">View repository on GitHub</a></p>')
@@ -138,7 +138,7 @@ def render(reports):
         content.append('<div class="scroll"><table><thead>' + tr(headers, "th") +
                        "</thead><tbody>" + "".join(tr(r, "td", i) for i, r in enumerate(rows)) + "</tbody></table></div>")
 
-    paragraph("C3, CMOC, LLVM-MC6809, and vbcc, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes; click a size to compare all four assembly outputs side by side. Executed instruction counts cover four seed runs. Lower is better for both metrics; CPU cycles are not measured.")
+    paragraph("C3, CMOC, LLVM-MC6809, and vbcc, side by side. Identical Shared 16-bit suite sources run on the same 6809 simulator. Sizes are in bytes; click a size to compare all four assembly outputs side by side. Executed instruction counts cover four seed runs. Lower is better for both metrics; CPU cycles are not measured.")
     content.append('<section class="versions">')
     versions = []
     for compiler in COMPILERS:
@@ -254,7 +254,7 @@ def render(reports):
     content.append("</details>")
     content.append("<details><summary>Compiler versions, original-suite results, and measurement details</summary>")
 
-    for group, title in (("kr16", "Shared kr16: compiler versions and runtime correctness"),
+    for group, title in (("kr16", "Shared 16-bit suite: compiler versions and runtime correctness"),
                          ("c89", "Original C89: 6809 correctness"), ("host", "Host correctness")):
         rows = []
         names = BENCHMARKS if group == "kr16" else C89_BENCHMARKS
@@ -268,7 +268,7 @@ def render(reports):
             rows.append([report.get("version", report["compiler"]), report.get("target", "Host"), report["flags"]] +
                         [statuses.get(name, "NOT RUN") for name in names])
         table(title, ["Compiler", "Target", "Flags", *names], rows)
-    paragraph("The shared kr16 suite uses identical K&R-compatible source for C3, CMOC, LLVM, and vbcc, 16-bit unsigned arithmetic, and one bare-metal harness. Its sort stores values in unsigned words; the original C89 sort uses bytes and 32-bit arithmetic. Compare sizes within a suite, not between suites.")
+    paragraph("The Shared 16-bit suite uses identical K&R-compatible source for C3, CMOC, LLVM, and vbcc, 16-bit unsigned arithmetic, and one bare-metal harness. Its sort stores values in unsigned words; the original C89 sort uses bytes and 32-bit arithmetic. Compare sizes within a suite, not between suites.")
     def linked_size(report, row, metric):
         if row["status"] != "PASS":
             return "Excluded (FAIL)"
@@ -282,14 +282,14 @@ def render(reports):
             continue
         for row in report["rows"]:
             valid = row["status"] == "PASS"
-            sizes.append([source_link(report.get("suite", "c89") + ": " + LABELS.get(row["benchmark"], row["benchmark"]),
+            sizes.append([source_link(("Shared 16-bit suite" if report.get("suite") == "kr16" else "Original C89") + ": " + LABELS.get(row["benchmark"], row["benchmark"]),
                                       ("benchmarks/kr16/" if report.get("suite") == "kr16" else "benchmarks/") + row["benchmark"] + ".c", report["revision"]),
                           report.get("version", report["compiler"]), report["flags"],
                           linked_size(report, row, "kernel_code_bytes"),
                           linked_size(report, row, "loaded_bytes"),
                           row.get("instructions", "Not measured") if valid else "Excluded (FAIL)"])
     table("6809 sizes (bytes)", ["Benchmark", "Compiler", "Flags", "Benchmark code", "Complete test program", "Instructions"], sorted(sizes, key=lambda row: str(row[0])), grouped=True)
-    paragraph("Benchmark code excludes compiler helper routines. Complete test program size includes the test runner and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The kr16 harness passes each seed in D and on the stack for C3/CMOC; LLVM's branch moves the argument and result through X. LLVM reserves 24 bytes of direct-page register scratch RAM, excluded from complete test program bytes. Its release is pinned to 1.0, with plain 6809 code, -std=c89, -fno-pie, and no LTO. C3 stack-check calls use a no-op stub; these bounded benchmark functions have a reserved 4 KiB stack and no static storage. These are bare-metal benchmark tests, not OS-9 application tests.")
+    paragraph("Benchmark code excludes compiler helper routines. Complete test program size includes the test runner and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The shared-suite harness passes each seed in D and on the stack for C3/CMOC; LLVM's branch moves the argument and result through X. LLVM reserves 24 bytes of direct-page register scratch RAM, excluded from complete test program bytes. Its release is pinned to 1.0, with plain 6809 code, -std=c89, -fno-pie, and no LTO. C3 stack-check calls use a no-op stub; these bounded benchmark functions have a reserved 4 KiB stack and no static storage. These are bare-metal benchmark tests, not OS-9 application tests.")
     content.append("</details>")
     compatibility = [r for r in reports if r.get("kind") == "compile-compatibility"]
     if compatibility:
@@ -305,15 +305,15 @@ def render(reports):
         table("C3 compile compatibility (not executed)",
               ["Compiler", "Target", "Flags", "Smoke link", *C89_BENCHMARKS], rows)
         table("C3 language probes", ["Compiler", "Flags", "Feature", "Compile result"], probes)
-        paragraph("C3 is tested against the unchanged C89 benchmark functions. COMPILE FAIL is an observed compatibility result, not a failed runtime checksum. ACCEPTED probes were compiled, not executed. C3 currently lacks limits.h and rejects unsigned short, unsigned long, and U-suffixed constants. These limitations apply to the original C89 suite; the shared kr16 results above execute real C3-generated code.")
-        paragraph("The original compatibility check records rejections; the shared kr16 runtime check requires passing checksums. Infrastructure failures still fail CI. Full diagnostics are included in the raw JSON and workflow artifacts.")
+        paragraph("C3 is tested against the unchanged C89 benchmark functions. COMPILE FAIL is an observed compatibility result, not a failed runtime checksum. ACCEPTED probes were compiled, not executed. C3 currently lacks limits.h and rejects unsigned short, unsigned long, and U-suffixed constants. These limitations apply to the original C89 suite; the Shared 16-bit suite results above execute real C3-generated code.")
+        paragraph("The original compatibility check records rejections; the Shared 16-bit suite runtime check requires passing checksums. Infrastructure failures still fail CI. Full diagnostics are included in the raw JSON and workflow artifacts.")
         content.append("</details>")
     paragraph("USIM is bundled with CMOC 0.1.99. The shared-suite adapter counts executed instructions with an opt-in USIM patch; it does not measure CPU cycles. Raw JSON, commands, assembly, linker maps, and executables are available in the workflow artifacts.")
     paragraph("Source revisions: " + ", ".join(sorted({r["revision"] for r in reports})))
     content.append('<p><a href="results.json">Raw result data</a> · <a href="matrix.md">Markdown matrix</a></p>')
     document = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
-                '<title>6809 compiler matrix</title><style>body{font:16px/1.55 system-ui;margin:2rem auto;padding:0 1.25rem;max-width:72rem;color:#172b3a;background:#f8fafc}h1{line-height:1.15}h2{margin-top:2rem;font-size:1.25rem}'
+                '<title>The Grand 6809 C Compiler Bake-Off!</title><style>body{font:16px/1.55 system-ui;margin:2rem auto;padding:0 1.25rem;max-width:72rem;color:#172b3a;background:#f8fafc}h1{line-height:1.15}h2{margin-top:2rem;font-size:1.25rem}'
                 'table{border-collapse:collapse;width:100%;background:white}th,td{border-bottom:1px solid #dbe3eb;padding:.65rem .8rem;text-align:left;white-space:nowrap}th{background:#eaf0f6;font-size:.9rem}td:nth-child(2){white-space:normal}.number{font-variant-numeric:tabular-nums;text-align:right}.smaller{background:#e0f2e9;color:#15583a}.pass{color:#14532d;background:#dcfce7;font-weight:700}.fail{color:#b91c1c;background:#fee2e2;font-weight:700}tr.group-start{border-top:2px solid #bccbd8}tbody th[scope=rowgroup]{vertical-align:middle;background:#f0f5fa;font-size:1rem}tbody th a{white-space:normal}'
                 '.rank{display:inline-block;min-width:2.1rem;margin-left:.35rem;padding:.08rem .3rem;border:1px solid;border-radius:999px;font-size:.7rem;font-weight:700;text-align:center;vertical-align:middle}.rank-1{color:#714b00;background:#fff0b3;border-color:#d5af45}.rank-2{color:#334155;background:#e8edf3;border-color:#a8b4c3}.rank-3{color:#7c3d16;background:#f7e1cd;border-color:#cc9a70}.rank-4{color:#58616e;background:#f3f4f6;border-color:#d1d5db}.versions{padding:1rem;background:#eaf0f6;border:1px solid #bccbd8;border-radius:8px;margin:1.5rem 0}.versions h2{margin-top:0}.versions td{white-space:normal;overflow-wrap:anywhere}.versions td:first-child{font-weight:700}.scroll{overflow:auto;border:1px solid #dbe3eb;border-radius:8px}p{max-width:65rem}details{margin:1.5rem 0;padding:1rem;background:white;border:1px solid #dbe3eb;border-radius:8px}summary{cursor:pointer;font-weight:600}a{color:#145daa}@media(max-width:600px){body{margin:1rem auto;padding:0 .75rem}th,td{padding:.5rem}} </style></head><body>' + "".join(content) + '</body></html>')
     return "\n".join(markdown), document
