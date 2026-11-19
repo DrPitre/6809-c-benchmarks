@@ -7,11 +7,14 @@ extensions belong in separately labeled comparisons.
 
 ## Current status
 
-Three C89 kernels run on the host and on an emulated Motorola 6809 using
-CMOC 0.1.99 and its bundled USIM simulator. CI publishes correctness and
-6809 code/program sizes at `-O0` and `-O2`. C3 (C-Cubed) is also tested for compile compatibility; the current C89
-kernels are rejected, so C3 execution and performance remain unmeasured.
-Cycle timing is not implemented yet. Host results remain a separate sanity check.
+The shared **kr16** suite runs identical K&R-compatible sources under both
+C3 (C-Cubed) and CMOC on a bare-metal 6809 simulator. Both compilers are checked
+with optimization disabled and enabled. All three kernels must match independent
+reference results for four seeds before their sizes enter the comparison.
+
+The original C89 suite remains available. CMOC runs it; C3's source-compatibility
+limitations appear separately in collapsed diagnostics on the published page.
+Cycle timing is not implemented yet.
 
 ## Run the checks
 
@@ -41,7 +44,9 @@ may be 16 or 32 bits. Historical dialect limitations should be recorded explicit
 The workflow builds and checks kernels on pushes, pull requests, and manual
 runs using host GCC/Clang and 6809 CMOC, each at `-O0` and `-O2`. CMOC 0.1.99
 and LWTOOLS 4.24 are built from SHA-256-verified release archives. USIM is
-built from the CMOC release. Two additional C3 compatibility jobs complete the eight-report matrix.
+built from the CMOC release. The two CMOC and two C3 jobs each record shared kr16 results as well as
+the original-suite results. Together with four host reports, this produces
+twelve reports. Host jobs also verify the kr16 algorithms.
 
 ## Comparison rules
 
@@ -118,7 +123,7 @@ The CMOC archive uses the author's HTTP hosting address; its pinned SHA-256
 must match before extraction. The digest was also checked against a preexisting
 local release archive. LWTOOLS is downloaded over HTTPS.
 
-## C3 (C-Cubed) compatibility
+## C3 (C-Cubed) and the shared kr16 suite
 
 C3 comes from [nitros9-languages](https://github.com/nitros9project/nitros9-languages/tree/e6e1a014c092fafc5e1378195ad33659b4e54676/c3),
 pinned by `tools/c3-revision.txt`. Host builds enable glibc default API
@@ -141,9 +146,43 @@ compiler diagnostics and exit codes. The source does not supply `limits.h`;
 independent probes also reject `unsigned short`, `unsigned long`, and
 `U`-suffixed literals. A typed unsigned parameter probe is accepted.
 
-The matrix labels these as **COMPILE FAIL**, not runtime correctness failures.
+The original C89 diagnostic section labels these as **COMPILE FAIL**.
+The primary kr16 comparison compiles and executes C3 code successfully.
 Compatibility jobs succeed when all attempts are recorded after the smoke
-link succeeds; broken toolchain setup still fails CI. Neither the smoke module
-nor accepted probes are executed. No C3 benchmark sizes or cycles are claimed.
-OS-9 execution and explicitly named K&R benchmark variants are future work;
-variants must be compared using the same source on every compiler.
+link succeeds; broken toolchain setup still fails CI. Neither the OS-9 smoke module nor compatibility probes are executed.
+C3 runtime results come from the shared bare-metal kr16 adapter below.
+OS-9 application execution and cycle timing remain future work.
+
+### Run shared runtime comparisons
+
+After building the pinned tools above:
+
+```sh
+python3 tools/check-kr16.py
+python3 tools/run-kr16.py --compiler c3 --optimization 0 --json build/reports/kr16-c3-O0.json
+python3 tools/run-kr16.py --compiler c3 --optimization 2 --json build/reports/kr16-c3-O2.json
+python3 tools/run-kr16.py --compiler cmoc --optimization 0 --json build/reports/kr16-cmoc-O0.json
+python3 tools/run-kr16.py --compiler cmoc --optimization 2 --json build/reports/kr16-cmoc-O2.json
+python3 tools/matrix.py build/reports build/site
+```
+
+For C3, `--optimization 2` selects its default `c3optx` optimizer, not a C3
+`-O2` option; `0` skips it. C3's `-a` stops before optimization, so the adapter
+explicitly runs `c3optx` before assembling. Each compiler receives exactly the
+same kernel source; reports record SHA-256 hashes and the matrix rejects
+mismatches. Assembly, objects, executables, maps, and command logs are retained.
+
+`kr16` is a distinct workload variant, not a silent rewrite of the original
+suite. It uses K&R definitions, `unsigned` arithmetic explicitly masked to
+16 bits, and no standard headers. The sort stores values 0..255 in unsigned
+words and uses 16-bit multiplication, whereas the original sorts bytes and
+uses 32-bit arithmetic. Checksum expectations are the same, but size results
+must only be compared within the same suite.
+
+The shared assembly harness supplies each seed in D and on the stack to cover
+C3 and CMOC calling conventions, then prints the returned 16-bit checksum.
+It loads at $2800 with stack top $FE00 and a reserved 4 KiB stack region; these
+bounded kernels use no static storage. C3's `_stkcheck` calls use a no-op stub,
+so this is a bare-metal kernel comparison, not an OS-9 runtime comparison.
+Only referenced compiler helper routines are linked. Kernel size excludes
+those helpers; loaded-program size includes them and the common harness.

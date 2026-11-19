@@ -6,7 +6,7 @@ import unittest
 
 TOOLS = Path(__file__).resolve().parents[1] / 'tools'
 sys.path.insert(0, str(TOOLS))
-from matrix import render
+from matrix import render, validate_shared_sources
 spec = importlib.util.spec_from_file_location('run_cmoc', TOOLS / 'run-cmoc.py')
 cmoc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cmoc)
@@ -46,11 +46,18 @@ class ReportTests(unittest.TestCase):
                   'probes': [{'name': 'unsigned_short', 'status': 'REJECTED'}]}
         markdown, document = render([report])
         host = markdown.split('## Host correctness')[1].split('## C3 compile')[0]
-        sizes = markdown.split('## 6809 sizes (bytes)')[1]
+        sizes = markdown.split('## 6809 sizes (bytes)')[1].split('## C3 compile')[0]
         self.assertNotIn('C3 test', host)
         self.assertNotIn('C3 test', sizes)
         self.assertIn('COMPILE FAIL', document)
         self.assertIn('REJECTED', document)
+
+
+    def test_shared_source_mismatch_blocks_comparison(self):
+        reports = [{'suite': 'kr16', 'rows': [{'benchmark': 'crc16', 'status': 'PASS',
+                                             'source_sha256': digest}]} for digest in ('aaa', 'bbb')]
+        with self.assertRaises(ValueError):
+            validate_shared_sources(reports)
 
 
 if __name__ == '__main__':

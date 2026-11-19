@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 
@@ -64,15 +65,16 @@ def main():
         report['smoke_link'] = 'PASS (not executed)'
         for name, source in PROBES.items():
             (build / (name + '.c')).write_text(source)
-            artifact = build / (name + '.a')
+            artifact = build / (name + '.r')
             artifact.unlink(missing_ok=True)
-            code, output = run(['c3', name + '.c', *flags, '-a', '-f=' + name + '.a'], name)
+            code, output = run(['c3', name + '.c', *flags, '-r'], name)
             report['probes'].append({'name': name, 'status': 'ACCEPTED' if code == 0 and artifact.exists() else 'REJECTED', 'exit_code': code, 'diagnostics': output})
         for name in BENCHMARKS:
-            artifact = build / (name + '.a')
+            artifact = build / (name + '.r')
             artifact.unlink(missing_ok=True)
-            code, output = run(['c3', str(ROOT / 'benchmarks' / (name + '.c')), *flags,
-                                '-v=' + str(ROOT / 'include'), '-a', '-f=' + name + '.a'], name)
+            shutil.copyfile(ROOT / 'benchmarks' / (name + '.c'), build / (name + '.c'))
+            code, output = run(['c3', name + '.c', *flags,
+                                '-v=' + str(ROOT / 'include'), '-r'], name)
             status = 'COMPILED (NOT RUN)' if code == 0 and artifact.exists() else 'COMPILE FAIL'
             report['rows'].append({'benchmark': name, 'status': status, 'exit_code': code, 'diagnostics': output})
             print(name, status)

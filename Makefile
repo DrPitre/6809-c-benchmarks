@@ -21,6 +21,7 @@ build/host/%: build/host/%.o build/host/runner.o
 
 check: all
 	python3 tools/check.py
+	CC="$(CC)" CFLAGS="$(CFLAGS)" python3 tools/check-kr16.py
 
 clean:
 	rm -rf build

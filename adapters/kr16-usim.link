@@ -1,0 +1,6 @@
+section start load 2800
+section code
+section rodata
+section data
+section bss,bss
+entry start
