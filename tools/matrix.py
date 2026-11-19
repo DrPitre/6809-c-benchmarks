@@ -32,12 +32,29 @@ def render(reports):
     for target, title in ((True, "6809 correctness"), (False, "Host correctness")):
         rows = []
         for report in reports:
+            if report.get("kind") == "compile-compatibility":
+                continue
             if (report.get("target") == "6809 / USIM") != target:
                 continue
             statuses = {r["benchmark"]: r["status"] for r in report["rows"]}
             rows.append([report.get("version", report["compiler"]), report.get("target", "Host"), report["flags"]] +
                         [statuses.get(name, "NOT RUN") for name in BENCHMARKS])
         table(title, ["Compiler", "Target", "Flags", *BENCHMARKS], rows)
+    compatibility = [r for r in reports if r.get("kind") == "compile-compatibility"]
+    if compatibility:
+        rows = []
+        probes = []
+        for report in compatibility:
+            statuses = {r["benchmark"]: r["status"] for r in report["rows"]}
+            rows.append([report.get("version", report["compiler"]), report["target"], report["flags"],
+                         report.get("smoke_link", "ERROR")] + [statuses.get(name, "NOT RUN") for name in BENCHMARKS])
+            probes.extend([report["version"], report["flags"], p["name"], p["status"]]
+                          for p in report.get("probes", []))
+        table("C3 compile compatibility (not executed)",
+              ["Compiler", "Target", "Flags", "Smoke link", *BENCHMARKS], rows)
+        table("C3 language probes", ["Compiler", "Flags", "Feature", "Compile result"], probes)
+        paragraph("C3 is tested against the unchanged C89 kernels. COMPILE FAIL is an observed compatibility result, not a failed runtime checksum. ACCEPTED probes were compiled, not executed. C3 currently lacks limits.h and rejects unsigned short, unsigned long, and U-suffixed constants. No C3 timing or benchmark sizes are reported. Its OS-9 output requires a separate execution adapter.")
+        paragraph("C3 jobs succeed when the toolchain smoke program links and all compatibility attempts are recorded, even if kernels are rejected. Infrastructure failures still fail CI. Full diagnostics are included in the raw JSON and workflow artifacts.")
     sizes = []
     for report in reports:
         if report.get("target") != "6809 / USIM":

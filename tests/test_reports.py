@@ -38,5 +38,20 @@ class ReportTests(unittest.TestCase):
         self.assertIn('NOT RUN', document)
 
 
+    def test_c3_compatibility_is_separate_from_correctness_and_sizes(self):
+        report = {'compiler': 'C3', 'version': 'C3 test', 'target': '6809 / OS-9',
+                  'kind': 'compile-compatibility', 'flags': 'optimizer on',
+                  'revision': 'abc', 'smoke_link': 'PASS (not executed)',
+                  'rows': [{'benchmark': 'crc16', 'status': 'COMPILE FAIL'}],
+                  'probes': [{'name': 'unsigned_short', 'status': 'REJECTED'}]}
+        markdown, document = render([report])
+        host = markdown.split('## Host correctness')[1].split('## C3 compile')[0]
+        sizes = markdown.split('## 6809 sizes (bytes)')[1]
+        self.assertNotIn('C3 test', host)
+        self.assertNotIn('C3 test', sizes)
+        self.assertIn('COMPILE FAIL', document)
+        self.assertIn('REJECTED', document)
+
+
 if __name__ == '__main__':
     unittest.main()

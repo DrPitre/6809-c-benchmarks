@@ -59,8 +59,37 @@ jobs:
           name: cmoc-evidence-O${{ matrix.optimization }}
           path: build/cmoc-O${{ matrix.optimization }}/
 
+  c3:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        optimizer: ["on", "off"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y build-essential bison flex curl git
+      - name: Build pinned LWTOOLS dependency
+        run: sh tools/build-cmoc.sh
+      - name: Build pinned C3 host tools and runtime
+        run: sh tools/build-c3.sh
+      - name: Record C3 compatibility
+        if: always()
+        run: python3 tools/run-c3.py --optimizer ${{ matrix.optimizer }} --json reports/c3-${{ matrix.optimizer }}.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: report-c3-${{ matrix.optimizer }}
+          path: reports/*.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: c3-evidence-${{ matrix.optimizer }}
+          path: build/c3-${{ matrix.optimizer }}/
+
   matrix:
-    needs: [check, cmoc]
+    needs: [check, cmoc, c3]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -74,7 +103,7 @@ jobs:
         run: python3 -m unittest discover -s tests
       - name: Generate matrix
         run: |
-          python3 tools/matrix.py reports build/site --expected-reports 6
+          python3 tools/matrix.py reports build/site --expected-reports 8
           cat build/site/matrix.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:

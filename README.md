@@ -9,8 +9,9 @@ extensions belong in separately labeled comparisons.
 
 Three C89 kernels run on the host and on an emulated Motorola 6809 using
 CMOC 0.1.99 and its bundled USIM simulator. CI publishes correctness and
-6809 code/program sizes at `-O0` and `-O2`. Cycle timing and additional 6809
-compilers are not implemented yet. Host results remain a separate sanity check.
+6809 code/program sizes at `-O0` and `-O2`. C3 (C-Cubed) is also tested for compile compatibility; the current C89
+kernels are rejected, so C3 execution and performance remain unmeasured.
+Cycle timing is not implemented yet. Host results remain a separate sanity check.
 
 ## Run the checks
 
@@ -40,7 +41,7 @@ may be 16 or 32 bits. Historical dialect limitations should be recorded explicit
 The workflow builds and checks kernels on pushes, pull requests, and manual
 runs using host GCC/Clang and 6809 CMOC, each at `-O0` and `-O2`. CMOC 0.1.99
 and LWTOOLS 4.24 are built from SHA-256-verified release archives. USIM is
-built from the CMOC release. All six reports feed the published matrix.
+built from the CMOC release. Two additional C3 compatibility jobs complete the eight-report matrix.
 
 ## Comparison rules
 
@@ -116,3 +117,31 @@ kernel footprint measurements. Timing is not measured by this adapter.
 The CMOC archive uses the author's HTTP hosting address; its pinned SHA-256
 must match before extraction. The digest was also checked against a preexisting
 local release archive. LWTOOLS is downloaded over HTTPS.
+
+## C3 (C-Cubed) compatibility
+
+C3 comes from [nitros9-languages](https://github.com/nitros9project/nitros9-languages/tree/e6e1a014c092fafc5e1378195ad33659b4e54676/c3),
+pinned by `tools/c3-revision.txt`. Both its default optimizer and `-o`
+(optimizer disabled) are tested. This is the Microware-derived 6809 compiler,
+not the unrelated C3 programming language.
+
+```sh
+sh tools/build-cmoc.sh  # supplies pinned LWTOOLS; existing builds may be reused
+sh tools/build-c3.sh
+python3 tools/run-c3.py --optimizer on --json build/reports/c3-on.json
+python3 tools/run-c3.py --optimizer off --json build/reports/c3-off.json
+python3 tools/matrix.py build/reports build/site
+```
+
+C3 first links a known-supported K&R smoke program to an OS-9 module. It then
+compiles small language probes and attempts each unchanged benchmark, retaining
+compiler diagnostics and exit codes. The source does not supply `limits.h`;
+independent probes also reject `unsigned short`, `unsigned long`, and
+`U`-suffixed literals. A typed unsigned parameter probe is accepted.
+
+The matrix labels these as **COMPILE FAIL**, not runtime correctness failures.
+Compatibility jobs succeed when all attempts are recorded after the smoke
+link succeeds; broken toolchain setup still fails CI. Neither the smoke module
+nor accepted probes are executed. No C3 benchmark sizes or cycles are claimed.
+OS-9 execution and explicitly named K&R benchmark variants are future work;
+variants must be compared using the same source on every compiler.
