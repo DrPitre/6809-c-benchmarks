@@ -351,3 +351,19 @@ Instruction count is **not cycle count**: addressing modes, branches, and other
 6809 operations have different cycle costs. Accurate cycles would require a
 validated cycle-accounting implementation in the simulator, including indexed
 addressing and taken-branch penalties; host elapsed time is not a substitute.
+
+
+### Assembly linked from size measurements
+
+Click any individual benchmark or complete-program size in the HTML or Markdown
+matrix to view that compiler's generated assembly for the exact test and optimizer
+setting. Each page includes all test compilation units (including support functions),
+compiler version, source revision, and linker map. C3's optimized view retains the
+output of `c3optx`; the other compilers retain their `.s` assembler inputs.
+These pages contain compiler output rather than a disassembly of linked library
+helpers. The linker map identifies those helpers contributing to complete size.
+
+Assembly and maps travel in the report JSON, so GitHub Pages publishes them with
+the matching measurements; they do not depend on the retention of Actions artifacts.
+The site reflects the latest run, while each downloadable matrix artifact preserves
+its own assembly pages. Failed measurements do not receive numeric size links.

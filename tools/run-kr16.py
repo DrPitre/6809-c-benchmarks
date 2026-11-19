@@ -145,6 +145,7 @@ def main():
             phase = 'source preparation'
             try:
                 objects = []
+                row['assembly'] = {}
                 hashes = {relative: hashlib.sha256((ROOT / 'benchmarks/kr16' / relative).read_bytes()).hexdigest()
                           for relative in sources(name)}
                 row['source_files'] = ['benchmarks/kr16/' + relative for relative in sources(name)]
@@ -173,6 +174,8 @@ def main():
                              '-O' + args.optimization, '-save-temps=obj', '-c', '-o', stem + '.o', stem + '.c'])
                     else:
                         run(['cmoc', '--usim', '-O' + args.optimization, '-i', '-c', '-o', stem + '.o', stem + '.c'])
+                    assembly_file = (stem + ('.opt.a' if args.optimization == '2' else '.a')) if args.compiler == 'c3' else stem + '.s'
+                    row['assembly'][assembly_file] = (build / assembly_file).read_text()
                     objects.append(stem + '.o')
                 phase = 'linking'
                 if args.compiler == 'vbcc':
@@ -188,6 +191,7 @@ def main():
                          '--map=' + name + '.map', '-o', name + '.srec', 'harness.o', *objects, *libraries])
                 phase = 'execution'
                 maptext = (build / (name + '.map')).read_text()
+                row['linker_map'] = maptext
                 env['USIM_BENCH_BEGIN'] = format(boundary_address(maptext, 'bench_begin'), 'x')
                 env['USIM_BENCH_END'] = format(boundary_address(maptext, 'bench_end'), 'x')
                 statistics = build / (name + '.instructions.log')

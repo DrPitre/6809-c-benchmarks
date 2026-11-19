@@ -67,6 +67,8 @@ def main():
             try:
                 run([cmoc, *flags, "-i", "-c", "-o", name + ".o", str(ROOT / "benchmarks" / (name + ".c"))])
                 run([cmoc, *flags, "-i", "-o", name + ".srec", name + ".o", "runner.o"])
+                row["assembly"] = {name + ".s": (directory / (name + ".s")).read_text()}
+                row["linker_map"] = (directory / (name + ".map")).read_text()
                 output = run([usim, name + ".srec"])
                 actual = [tuple(map(int, line.split())) for line in output.splitlines()]
                 expected = [(seed, reference(seed)) for seed in SEEDS]

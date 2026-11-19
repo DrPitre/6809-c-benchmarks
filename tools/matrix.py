@@ -1,4 +1,5 @@
 """Render recorded host and 6809 checks without conflating their results."""
+from assembly_report import assembly_url, publish_assembly
 import argparse
 import html
 import json
@@ -118,7 +119,7 @@ def render(reports):
                 if isinstance(cell, SourceLink):
                     value = '<a href="' + html.escape(cell.url, quote=True) + '">' + value + '</a>'
                 classes = []
-                if isinstance(cell, int):
+                if isinstance(cell, int) or (isinstance(cell, SourceLink) and cell.label.isdecimal()):
                     classes.append("number")
                 if highlights and (row_index, column) in highlights:
                     classes.append("smaller")
@@ -137,7 +138,7 @@ def render(reports):
         content.append('<div class="scroll"><table><thead>' + tr(headers, "th") +
                        "</thead><tbody>" + "".join(tr(r, "td", i) for i, r in enumerate(rows)) + "</tbody></table></div>")
 
-    paragraph("C3, CMOC, LLVM-MC6809, and vbcc, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes. Executed instruction counts cover four seed runs. Lower is better for both metrics; CPU cycles are not measured.")
+    paragraph("C3, CMOC, LLVM-MC6809, and vbcc, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes; click a size to view its generated assembly and linker map. Executed instruction counts cover four seed runs. Lower is better for both metrics; CPU cycles are not measured.")
     content.append('<section class="versions">')
     versions = []
     for compiler in COMPILERS:
@@ -153,6 +154,7 @@ def render(reports):
     table("Compiler versions tested", ["Compiler", "Reported version", "Release / revision"], versions)
     content.append('</section>')
     shared = {}
+    assembly_links = {}
     for report in reports:
         if report.get("suite") != "kr16":
             continue
@@ -165,6 +167,7 @@ def render(reports):
             if key in shared:
                 raise ValueError("Duplicate shared compiler configuration")
             shared[key] = row
+            assembly_links[key] = assembly_url(report, row)
 
     content.append('<section class="versions">')
     paragraph("Overall compiler ranking by benchmark code size. Lower is better; the leading compiler scores 100. Each test has equal weight through the geometric mean of relative sizes. Only tests with valid sizes and passing results from all four compilers enter the ranking. This measures this suite, not all possible C programs; runtime helpers and the harness are excluded.")
@@ -208,7 +211,11 @@ def render(reports):
                         difference = COMPILERS[winners[0]] + " by " + str(ordered[1] - ordered[0]) + (" instructions" if metric == "instructions" else " B")
                     if len(winners) != len(values):
                         highlights.update((len(rows), i + 2) for i in winners)
-                rows.append([labels[name], "On" if enabled else "Off", *values, difference])
+                display_values = []
+                for compiler, value in zip(COMPILERS, values):
+                    url = assembly_links.get((name, enabled, compiler))
+                    display_values.append(SourceLink(str(value), url) if url and isinstance(value, int) and metric != "instructions" else value)
+                rows.append([labels[name], "On" if enabled else "Off", *display_values, difference])
         table(title, ["Benchmark", "Optimization", *COMPILERS, "Smallest"], rows, highlights, grouped=True, ranks=ranks)
         if metric == "instructions":
             paragraph("Instruction counts sum the four seeds and include the benchmark call/return, ABI register transfers, supporting functions, and linked runtime helpers. Startup, seed loading, result printing, and stack cleanup in the harness are excluded. Prefixed 6809 opcodes count as one instruction. Counts are not CPU cycles: instructions have different costs. Failed results are excluded; per-seed counts remain in the raw JSON and workflow artifacts.")
@@ -262,6 +269,13 @@ def render(reports):
                         [statuses.get(name, "NOT RUN") for name in names])
         table(title, ["Compiler", "Target", "Flags", *names], rows)
     paragraph("The shared kr16 suite uses identical K&R-compatible source for C3, CMOC, LLVM, and vbcc, 16-bit unsigned arithmetic, and one bare-metal harness. Its sort stores values in unsigned words; the original C89 sort uses bytes and 32-bit arithmetic. Compare sizes within a suite, not between suites.")
+    def linked_size(report, row, metric):
+        if row["status"] != "PASS":
+            return "Excluded (FAIL)"
+        value = row.get(metric, "Unavailable")
+        url = assembly_url(report, row)
+        return SourceLink(str(value), url) if url and isinstance(value, int) else value
+
     sizes = []
     for report in reports:
         if report.get("kind") == "compile-compatibility" or not report.get("target", "").startswith("6809"):
@@ -271,8 +285,8 @@ def render(reports):
             sizes.append([source_link(report.get("suite", "c89") + ": " + LABELS.get(row["benchmark"], row["benchmark"]),
                                       ("benchmarks/kr16/" if report.get("suite") == "kr16" else "benchmarks/") + row["benchmark"] + ".c", report["revision"]),
                           report.get("version", report["compiler"]), report["flags"],
-                          row.get("kernel_code_bytes", "Unavailable") if valid else "Excluded (FAIL)",
-                          row.get("loaded_bytes", "Unavailable") if valid else "Excluded (FAIL)",
+                          linked_size(report, row, "kernel_code_bytes"),
+                          linked_size(report, row, "loaded_bytes"),
                           row.get("instructions", "Not measured") if valid else "Excluded (FAIL)"])
     table("6809 sizes (bytes)", ["Benchmark", "Compiler", "Flags", "Benchmark code", "Complete test program", "Instructions"], sorted(sizes, key=lambda row: str(row[0])), grouped=True)
     paragraph("Benchmark code excludes compiler helper routines. Complete test program size includes the test runner and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The kr16 harness passes each seed in D and on the stack for C3/CMOC; LLVM's branch moves the argument and result through X. LLVM reserves 24 bytes of direct-page register scratch RAM, excluded from complete test program bytes. Its release is pinned to 1.0, with plain 6809 code, -std=c89, -fno-pie, and no LTO. C3 stack-check calls use a no-op stub; these bounded benchmark functions have a reserved 4 KiB stack and no static storage. These are bare-metal benchmark tests, not OS-9 application tests.")
@@ -316,6 +330,7 @@ def main():
         raise SystemExit("Missing reports; refusing to publish an incomplete matrix")
     markdown, document = render(reports)
     args.output.mkdir(parents=True, exist_ok=True)
+    publish_assembly(reports, args.output)
     (args.output / "matrix.md").write_text(markdown)
     (args.output / "index.html").write_text(document)
     (args.output / "results.json").write_text(json.dumps(reports, indent=2) + "\n")
