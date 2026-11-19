@@ -9,7 +9,7 @@ extensions belong in separately labeled comparisons.
 
 The shared **kr16** suite runs identical K&R-compatible sources under both
 C3 (C-Cubed), CMOC, and LLVM-MC6809 1.0 on a bare-metal 6809 simulator. All three compilers are checked
-with optimization disabled and enabled. All three kernels must match independent
+with optimization disabled and enabled. All three benchmark functions must match independent
 reference results for four seeds before their sizes enter the comparison.
 
 The original C89 suite remains available. CMOC runs it; C3's source-compatibility
@@ -27,21 +27,21 @@ make check
 Override `CC` and `CFLAGS` to check another host compiler or optimization level.
 Run `make clean` when changing flags, since Make does not track flag changes.
 
-| Kernel | Work performed |
+| Benchmark | Work performed |
 | --- | --- |
 | crc16 | CRC-16/CCITT over bytes 0 through 255 |
 | insertion_sort | Generate and sort 64 bytes; compute an ordered checksum |
 | mix16 | 1,024 rounds of 16-bit shifts, XOR, and addition |
 
-Kernels use no I/O or allocation. The sort workload includes data generation
-and checksum costs, including 32-bit arithmetic. Each kernel returns a checksum
+Benchmark functions use no I/O or allocation. The sort workload includes data generation
+and checksum costs, including 32-bit arithmetic. Each benchmark function returns a checksum
 for a supplied seed. Four seeds are checked against independent Python models.
 The data model requires 8-bit bytes and 16-bit unsigned short; unsigned int
 may be 16 or 32 bits. Historical dialect limitations should be recorded explicitly.
 
 ## GitHub Actions
 
-The workflow builds and checks kernels on pushes, pull requests, and manual
+The workflow builds and checks benchmark functions on pushes, pull requests, and manual
 runs using host GCC/Clang and 6809 CMOC, each at `-O0` and `-O2`. CMOC 0.1.99
 and LWTOOLS 4.24 are built from SHA-256-verified release archives. USIM is
 built from the CMOC release. The two CMOC and two C3 jobs each record shared kr16 results as well as
@@ -50,13 +50,13 @@ fourteen reports, including LLVM at `-O0` and `-O2`. Host jobs also verify the k
 
 ## Comparison rules
 
-- Compile the runner and kernel separately; disable link-time optimization.
+- Compile the runner and benchmark function separately; disable link-time optimization.
 - Verify output on the execution target before accepting measurements.
 - Record the compiler version, exact commands, flags, source revision, ABI,
   platform, CPU, and emulator or hardware configuration.
 - Measure cycles around `bench_run`, excluding runner I/O. Document call and
   timer overhead, interrupt handling, repetitions, and subtraction methods.
-- Distinguish kernel code/data size, linked runtime size, and complete executable
+- Distinguish benchmark function code/data size, linked runtime size, and complete executable
   size. Include compiler helper routines in a documented size accounting method.
 - Keep bare-metal and OS-9 comparisons separate. Compare matching optimization
   goals and publish all flags. Do not infer cycle counts from host elapsed time.
@@ -66,7 +66,7 @@ fourteen reports, including LLVM at `-O0` and `-O2`. Host jobs also verify the k
 See [adapters/README.md](adapters/README.md) for the adapter contract and
 [results/README.md](results/README.md) for required measurement metadata.
 Start with one verified compiler/target combination, then add a second using
-the same kernels and measurement boundaries. Compiler binaries and ROM images
+the same benchmark functions and measurement boundaries. Compiler binaries and ROM images
 are not bundled.
 
 ## Published matrix
@@ -104,7 +104,7 @@ python3 tools/matrix.py build/reports build/site
 ```
 
 The build stays under `build/`. `CMOC` and `USIM` may override executable paths
-for an existing installation; LWTOOLS must also be on PATH. Each kernel and
+for an existing installation; LWTOOLS must also be on PATH. Each benchmark function and
 runner are compiled separately. Each run has a 60-second timeout. Reports
 include compiler/assembler/linker versions, exact command arguments, checksums,
 and sizes. CI retains assembly, S-record executables, maps, and command logs.
@@ -113,11 +113,11 @@ CMOC has no `limits.h`; `bench.h` uses its documented 8-bit-byte data model
 and a compile-time short-size check. The benchmark algorithms are unchanged.
 The USIM adapter uses CMOC's `cmoc.h` for output.
 
-Kernel code size is the kernel object's `code` section, excluding linked
-helpers. Loaded program size counts unique S-record data bytes, including
+Benchmark code size is the benchmark function object's `code` section, excluding linked
+helpers. Complete test program size counts unique S-record data bytes, including
 startup, runner, initialized data, and linked runtime, but excluding BSS and
 S-record text overhead. These metrics are distinct and are not standalone
-kernel footprint measurements. Timing is not measured by this adapter.
+benchmark function footprint measurements. Timing is not measured by this adapter.
 
 The CMOC archive uses the author's HTTP hosting address; its pinned SHA-256
 must match before extraction. The digest was also checked against a preexisting
@@ -169,7 +169,7 @@ python3 tools/matrix.py build/reports build/site
 For C3, `--optimization 2` selects its default `c3optx` optimizer, not a C3
 `-O2` option; `0` skips it. C3's `-a` stops before optimization, so the adapter
 explicitly runs `c3optx` before assembling. Each compiler receives exactly the
-same kernel source; reports record SHA-256 hashes and the matrix rejects
+same benchmark function source; reports record SHA-256 hashes and the matrix rejects
 mismatches. Assembly, objects, executables, maps, and command logs are retained.
 
 `kr16` is a distinct workload variant, not a silent rewrite of the original
@@ -183,10 +183,10 @@ The shared assembly harness supplies each seed in D and on the stack to cover
 C3 and CMOC calling conventions; the LLVM branch moves the argument and
 return value through X, then prints the returned 16-bit checksum.
 It loads at $2800 with stack top $FE00 and a reserved 4 KiB stack region; these
-bounded kernels use no static storage. C3's `_stkcheck` calls use a no-op stub,
-so this is a bare-metal kernel comparison, not an OS-9 runtime comparison.
-Only referenced compiler helper routines are linked. Kernel size excludes
-those helpers; loaded-program size includes them and the common harness.
+bounded benchmark functions use no static storage. C3's `_stkcheck` calls use a no-op stub,
+so this is a bare-metal benchmark function comparison, not an OS-9 runtime comparison.
+Only referenced compiler helper routines are linked. Benchmark code size excludes
+those helpers; complete test program size includes them and the common harness.
 
 ## LLVM-MC6809 release 1.0
 
@@ -207,7 +207,7 @@ python3 tools/run-kr16.py --compiler llvm --optimization 2 --json build/reports/
 python3 tools/matrix.py build/reports build/site
 ```
 
-The unchanged kr16 kernels are compiled with `-mcpu=mc6809 -std=c89 -fno-pie
+The unchanged kr16 benchmark functions are compiled with `-mcpu=mc6809 -std=c89 -fno-pie
 -fno-lto` and `-O0` or `-O2`. LLVM's integrated assembler and LLD produce ELF;
 `mc6809-objcopy` converts it to S-records for the same USIM used by C3/CMOC.
 Only referenced LLVM compiler-runtime helpers are linked. No C library,
@@ -216,10 +216,10 @@ Only referenced LLVM compiler-runtime helpers are linked. No C library,
 The shared harness is translated to LLVM assembler directive/label syntax,
 with a calling-convention branch for X as the first argument and return
 register. This adds four bytes of register-transfer instructions to the
-loaded harness; the kernel code metric excludes it. LLVM reserves 24 bytes
+loaded harness; the benchmark function code metric excludes it. LLVM reserves 24 bytes
 of direct-page scratch registers, mapped at $0000–$0017; those RAM bytes are
 not counted as loaded code. ELF files, generated assembly, maps, and version
-banners are retained in CI artifacts. Kernel code size sums the kernel
+banners are retained in CI artifacts. Benchmark code size sums the benchmark function
 object's `.text` sections, excluding metadata, helpers, and ELF headers.
 
 `-O2` is a general optimization setting, not a size-minimizing setting. LLVM

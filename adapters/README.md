@@ -7,7 +7,7 @@ correctness and sizes; `tools/build-cmoc.sh` builds pinned dependencies.
 Additional target adapters should:
 
 1. Document toolchain installation prerequisites and supported C dialect.
-2. Compile each unchanged kernel separately from its platform runner.
+2. Compile each unchanged benchmark function separately from its platform runner.
 3. Run all four seeds used in `tools/check.py` and compare checksums.
 4. Provide reproducible commands for building and executing artifacts.
 5. Measure the complete `bench_run` call with a documented cycle-count boundary.
@@ -15,7 +15,7 @@ Additional target adapters should:
 
 Keep compiler configuration distinct from platform execution support: the same
 compiler may support several environments. Target-specific startup, output, and
-timing belong here, not in the kernels. Never silently rewrite a kernel to make
+timing belong here, not in the benchmark functions. Never silently rewrite a benchmark function to make
 one compiler accept it; record a compatibility failure or publish a separately
 named variant. Capability probes and library coverage are future additions.
 
@@ -26,14 +26,14 @@ main README for the observed dialect limitations and status meanings.
 
 `tools/run-kr16.py` executes identical sources from `benchmarks/kr16/` with
 C3, CMOC, and LLVM-MC6809. `kr16-usim.asm` and `kr16-usim.link` provide a common
-bare-metal harness, changing only the imported kernel symbol for the compiler
+bare-metal harness, changing only the imported benchmark function symbol for the compiler
 ABI. C3 objects are translated by its upstream `c3-as`; helper routines come
 from its `libc3lw` archive. CMOC uses its own helper archives. All are run by
 the same pinned USIM executable. The source hash is part of every result.
 
-This harness deliberately supports kernels without static storage, OS calls,
+This harness deliberately supports benchmark functions without static storage, OS calls,
 or floating point. Do not use it as a general OS-9 loader. `_stkcheck` is a
-no-op stub for the bounded stack usage of these kernels. The full C3 OS-9
+no-op stub for the bounded stack usage of these benchmark functions. The full C3 OS-9
 runtime is not part of these results.
 
 LLVM uses `kr16-llvm.ld` with ELF objects and compiler-runtime helpers from

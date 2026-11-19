@@ -74,8 +74,8 @@ def render(reports):
             shared[key] = row
 
     labels = {"crc16": "CRC16", "insertion_sort": "Insertion sort", "mix16": "16-bit arithmetic"}
-    for metric, title in (("kernel_code_bytes", "Kernel code comparison"),
-                          ("loaded_bytes", "Loaded program comparison")):
+    for metric, title in (("kernel_code_bytes", "Benchmark code size"),
+                          ("loaded_bytes", "Complete test program size")):
         rows, highlights = [], set()
         for name in BENCHMARKS:
             for enabled in (True, False):
@@ -100,7 +100,7 @@ def render(reports):
                         highlights.update((len(rows), i + 2) for i in winners)
                 rows.append([labels[name], "On" if enabled else "Off", *values, difference])
         table(title, ["Benchmark", "Optimization", *COMPILERS, "Smallest"], rows, highlights)
-    paragraph("Kernel code excludes compiler helpers. Loaded program includes those helpers and the common harness, so its ranking can differ. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
+    paragraph("Benchmark code size measures the compiled test function alone. Complete test program size also includes compiler helpers and the test runner, so its ranking can differ. Both measure bytes loaded into memory, excluding uninitialized storage and file-format overhead. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
     paragraph("Optimization on means C3's default optimizer and CMOC/LLVM -O2; off disables C3's optimizer and uses CMOC/LLVM -O0. These settings do not imply identical optimization passes.")
     statuses = []
     for name in BENCHMARKS:
@@ -133,8 +133,8 @@ def render(reports):
             sizes.append([report.get("suite", "c89"), report.get("version", report["compiler"]), report["flags"], row["benchmark"],
                           row.get("kernel_code_bytes", "Unavailable") if valid else "Excluded (FAIL)",
                           row.get("loaded_bytes", "Unavailable") if valid else "Excluded (FAIL)", "Not measured"])
-    table("6809 sizes (bytes)", ["Suite", "Compiler", "Flags", "Benchmark", "Kernel code", "Loaded program", "Cycles"], sizes)
-    paragraph("Kernel code excludes compiler helper routines. Loaded program includes the harness and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The kr16 harness passes each seed in D and on the stack for C3/CMOC; LLVM's branch moves the argument and result through X. LLVM reserves 24 bytes of direct-page register scratch RAM, excluded from loaded-program bytes. Its release is pinned to 1.0, with plain 6809 code, -std=c89, -fno-pie, and no LTO. C3 stack-check calls use a no-op stub; these bounded kernels have a reserved 4 KiB stack and no static storage. These are bare-metal kernel tests, not OS-9 application tests.")
+    table("6809 sizes (bytes)", ["Suite", "Compiler", "Flags", "Benchmark", "Benchmark code", "Complete test program", "Cycles"], sizes)
+    paragraph("Benchmark code excludes compiler helper routines. Complete test program size includes the test runner and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The kr16 harness passes each seed in D and on the stack for C3/CMOC; LLVM's branch moves the argument and result through X. LLVM reserves 24 bytes of direct-page register scratch RAM, excluded from complete test program bytes. Its release is pinned to 1.0, with plain 6809 code, -std=c89, -fno-pie, and no LTO. C3 stack-check calls use a no-op stub; these bounded benchmark functions have a reserved 4 KiB stack and no static storage. These are bare-metal benchmark tests, not OS-9 application tests.")
     content.append("</details>")
     compatibility = [r for r in reports if r.get("kind") == "compile-compatibility"]
     if compatibility:
@@ -150,7 +150,7 @@ def render(reports):
         table("C3 compile compatibility (not executed)",
               ["Compiler", "Target", "Flags", "Smoke link", *BENCHMARKS], rows)
         table("C3 language probes", ["Compiler", "Flags", "Feature", "Compile result"], probes)
-        paragraph("C3 is tested against the unchanged C89 kernels. COMPILE FAIL is an observed compatibility result, not a failed runtime checksum. ACCEPTED probes were compiled, not executed. C3 currently lacks limits.h and rejects unsigned short, unsigned long, and U-suffixed constants. These limitations apply to the original C89 suite; the shared kr16 results above execute real C3-generated code.")
+        paragraph("C3 is tested against the unchanged C89 benchmark functions. COMPILE FAIL is an observed compatibility result, not a failed runtime checksum. ACCEPTED probes were compiled, not executed. C3 currently lacks limits.h and rejects unsigned short, unsigned long, and U-suffixed constants. These limitations apply to the original C89 suite; the shared kr16 results above execute real C3-generated code.")
         paragraph("The original compatibility check records rejections; the shared kr16 runtime check requires passing checksums. Infrastructure failures still fail CI. Full diagnostics are included in the raw JSON and workflow artifacts.")
         content.append("</details>")
     paragraph("USIM is bundled with CMOC 0.1.99. This adapter does not measure cycles. Raw JSON, commands, assembly, linker maps, and executables are available in the workflow artifacts.")

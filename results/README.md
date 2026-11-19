@@ -14,7 +14,7 @@ Each published run should include:
 - Hardware clock/configuration or emulator version/configuration
 - Benchmark name, seed, expected checksum, observed checksum, correctness status
 - Cycles, measurement boundaries, overhead treatment, and repetition count
-- Kernel code bytes, initialized data bytes, BSS bytes, linked helper/runtime
+- Benchmark code bytes, initialized data bytes, BSS bytes, linked helper/runtime
   bytes, executable bytes, and the method used to obtain each size
 - Raw output and supporting map/listing artifacts
 
