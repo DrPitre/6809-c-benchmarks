@@ -68,10 +68,18 @@ class ReportTests(unittest.TestCase):
                             "rows": [{"benchmark": "crc16", "status": "PASS",
                                       "source_sha256": "same", "loaded_bytes": size,
                                       "kernel_code_bytes": size}]})
-        markdown, _ = render(reports)
+        markdown, document = render(reports)
+        self.assertIn('rank rank-1', document)
+        self.assertIn('rank rank-4', document)
         self.assertIn("| On | 467 | 374 | 430 | 480 | CMOC by 56 B |", markdown)
+        reports[-1]["rows"][0]["kernel_code_bytes"] = 374
+        _, tied = render(reports)
+        first_table = tied.split('<h2>Benchmark code size</h2>')[1].split('</table>')[0]
+        self.assertEqual(first_table.count('rank rank-1'), 2)
+        self.assertNotIn('rank rank-2', first_table)
         reports[-1]["rows"][0]["status"] = "FAIL"
-        markdown, _ = render(reports)
+        markdown, document = render(reports)
+        self.assertNotIn('class="rank rank-', document)
         self.assertIn("| On | 467 | 374 | 430 | Excluded (FAIL) | — |", markdown)
 
     def test_source_links_pin_report_revision(self):

@@ -51,7 +51,7 @@ def render(reports):
         markdown.extend([text, ""])
         content.append("<p>" + html.escape(text) + "</p>")
 
-    def table(title, headers, rows, highlights=None, grouped=False):
+    def table(title, headers, rows, highlights=None, grouped=False, ranks=None):
         markdown.extend(["## " + title, ""])
         content.append("<h2>" + html.escape(title) + "</h2>")
         def mdrow(cells):
@@ -84,6 +84,11 @@ def render(reports):
                 if highlights and (row_index, column) in highlights:
                     classes.append("smaller")
                     value = "<strong>" + value + "</strong>"
+                if ranks and (row_index, column) in ranks:
+                    rank = ranks[row_index, column]
+                    ordinal = ("1st", "2nd", "3rd", "4th")[rank - 1]
+                    value += (' <span class="rank rank-' + str(rank) + '" title="' + ordinal +
+                              ' place by size in this row">' + ordinal + '</span>')
                 if cell == "PASS":
                     classes.append("pass")
                 elif cell in ("FAIL", "COMPILE FAIL", "Excluded (FAIL)"):
@@ -126,7 +131,7 @@ def render(reports):
     labels = {name: source_link(LABELS[name], "benchmarks/kr16/" + name + ".c", shared_revision) for name in BENCHMARKS}
     for metric, title in (("kernel_code_bytes", "Benchmark code size"),
                           ("loaded_bytes", "Complete test program size")):
-        rows, highlights = [], set()
+        rows, highlights, ranks = [], set(), {}
         for name in BENCHMARKS:
             for enabled in (True, False):
                 values = []
@@ -141,6 +146,8 @@ def render(reports):
                 difference = "—"
                 if all(isinstance(v, int) for v in values):
                     ordered = sorted(values)
+                    for i, value in enumerate(values):
+                        ranks[len(rows), i + 2] = ordered.index(value) + 1
                     winners = [i for i, value in enumerate(values) if value == ordered[0]]
                     if len(winners) > 1:
                         difference = "Tie: " + "/".join(COMPILERS[i] for i in winners)
@@ -149,8 +156,8 @@ def render(reports):
                     if len(winners) != len(values):
                         highlights.update((len(rows), i + 2) for i in winners)
                 rows.append([labels[name], "On" if enabled else "Off", *values, difference])
-        table(title, ["Benchmark", "Optimization", *COMPILERS, "Smallest"], rows, highlights, grouped=True)
-    paragraph("Benchmark code size measures all test-supplied functions, including separately compiled support functions. Complete test program size also includes compiler helpers and the test runner, so its ranking can differ. Both measure bytes loaded into memory, excluding uninitialized storage and file-format overhead. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
+        table(title, ["Benchmark", "Optimization", *COMPILERS, "Smallest"], rows, highlights, grouped=True, ranks=ranks)
+    paragraph("Benchmark code size measures all test-supplied functions, including separately compiled support functions. Complete test program size also includes compiler helpers and the test runner, so its ranking can differ. Both measure bytes loaded into memory, excluding uninitialized storage and file-format overhead. Badges rank each complete four-compiler row by size (1st is smallest); ties share a place. Rows with failed or missing results have no ranking. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
     paragraph("Optimization on means C3's default optimizer and CMOC/LLVM -O2 plus vbcc -O=1023 (vc -O2); off disables C3's optimizer and uses CMOC/LLVM -O0 and vbcc -O=0. vbcc uses its standard assembler branch/offset relaxation at both settings. These settings do not imply identical optimization passes.")
     statuses = []
     for name in BENCHMARKS:
@@ -238,7 +245,7 @@ def render(reports):
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
                 '<title>6809 compiler matrix</title><style>body{font:16px/1.55 system-ui;margin:2rem auto;padding:0 1.25rem;max-width:72rem;color:#172b3a;background:#f8fafc}h1{line-height:1.15}h2{margin-top:2rem;font-size:1.25rem}'
                 'table{border-collapse:collapse;width:100%;background:white}th,td{border-bottom:1px solid #dbe3eb;padding:.65rem .8rem;text-align:left;white-space:nowrap}th{background:#eaf0f6;font-size:.9rem}td:nth-child(2){white-space:normal}.number{font-variant-numeric:tabular-nums;text-align:right}.smaller{background:#e0f2e9;color:#15583a}.pass{color:#14532d;background:#dcfce7;font-weight:700}.fail{color:#b91c1c;background:#fee2e2;font-weight:700}tr.group-start{border-top:2px solid #bccbd8}tbody th[scope=rowgroup]{vertical-align:middle;background:#f0f5fa;font-size:1rem}tbody th a{white-space:normal}'
-                '.versions{padding:1rem;background:#eaf0f6;border:1px solid #bccbd8;border-radius:8px;margin:1.5rem 0}.versions h2{margin-top:0}.versions td{white-space:normal;overflow-wrap:anywhere}.versions td:first-child{font-weight:700}.scroll{overflow:auto;border:1px solid #dbe3eb;border-radius:8px}p{max-width:65rem}details{margin:1.5rem 0;padding:1rem;background:white;border:1px solid #dbe3eb;border-radius:8px}summary{cursor:pointer;font-weight:600}a{color:#145daa}@media(max-width:600px){body{margin:1rem auto;padding:0 .75rem}th,td{padding:.5rem}} </style></head><body>' + "".join(content) + '</body></html>')
+                '.rank{display:inline-block;min-width:2.1rem;margin-left:.35rem;padding:.08rem .3rem;border:1px solid;border-radius:999px;font-size:.7rem;font-weight:700;text-align:center;vertical-align:middle}.rank-1{color:#714b00;background:#fff0b3;border-color:#d5af45}.rank-2{color:#334155;background:#e8edf3;border-color:#a8b4c3}.rank-3{color:#7c3d16;background:#f7e1cd;border-color:#cc9a70}.rank-4{color:#58616e;background:#f3f4f6;border-color:#d1d5db}.versions{padding:1rem;background:#eaf0f6;border:1px solid #bccbd8;border-radius:8px;margin:1.5rem 0}.versions h2{margin-top:0}.versions td{white-space:normal;overflow-wrap:anywhere}.versions td:first-child{font-weight:700}.scroll{overflow:auto;border:1px solid #dbe3eb;border-radius:8px}p{max-width:65rem}details{margin:1.5rem 0;padding:1rem;background:white;border:1px solid #dbe3eb;border-radius:8px}summary{cursor:pointer;font-weight:600}a{color:#145daa}@media(max-width:600px){body{margin:1rem auto;padding:0 .75rem}th,td{padding:.5rem}} </style></head><body>' + "".join(content) + '</body></html>')
     return "\n".join(markdown), document
 
 
