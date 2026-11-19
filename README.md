@@ -8,7 +8,7 @@ extensions belong in separately labeled comparisons.
 ## Current status
 
 The shared **kr16** suite runs identical K&R-compatible sources under both
-C3 (C-Cubed), CMOC, and LLVM-MC6809 1.0 on a bare-metal 6809 simulator. All three compilers are checked
+C3 (C-Cubed), CMOC, LLVM-MC6809 1.0, and vbcc on a bare-metal 6809 simulator. All four compilers are checked
 with optimization disabled and enabled. All twelve shared benchmarks must match independent
 reference results for four seeds before their sizes enter the comparison.
 
@@ -46,7 +46,7 @@ runs using host GCC/Clang and 6809 CMOC, each at `-O0` and `-O2`. CMOC 0.1.99
 and LWTOOLS 4.24 are built from SHA-256-verified release archives. USIM is
 built from the CMOC release. The two CMOC and two C3 jobs each record shared kr16 results as well as
 the original-suite results. Together with four host reports, this produces
-fourteen reports, including LLVM at `-O0` and `-O2`. Host jobs also verify the kr16 algorithms.
+sixteen reports, including LLVM and vbcc at `-O0` and `-O2`. Host jobs also verify the kr16 algorithms.
 
 ## Comparison rules
 
@@ -260,9 +260,9 @@ program size. Report hashes cover every source file for a test. The runtime
 error hook stops USIM with a nonzero status if a C3 arithmetic helper reports
 an error; it does not silently return success.
 
-Expand **Test purposes and source files** for descriptions and one link per
-source file, including supporting functions and the original C89 suite. Links
-point to the exact Git commit used by CI. Local previews without a commit ID use `main`.
+Comparison tables group optimization On/Off subrows beneath one linked benchmark
+name. Expand **Test purposes and source files** for descriptions, supporting
+functions, and the original C89 suite. Links point to the exact Git commit used by CI. Local previews without a commit ID use `main`.
 
 ### Failure discovered by the expanded suite
 
@@ -274,3 +274,38 @@ hosts. This identifies a host-dependent C3 compilation failure, not a runtime
 checksum failure. The underlying compiler defect has not been diagnosed.
 The report retains the failure and excludes its size; CI correctly flags the
 C3 jobs. Source, commands, and diagnostics are preserved for investigation.
+
+
+## vbcc 6809
+
+The [author's 6809 Release 1 Preview dated 2026-01-25](http://www.compilers.de/vbcc6809_20260125.zip)
+is pinned by SHA-256 in `tools/install-vbcc.sh`. GitHub Actions installs the
+bundled Linux x86_64 compiler, vasm, vlink, and runtime library. The archive's
+vbcc manual contains the upstream license terms; toolchains are downloaded
+at build time rather than vendored into this repository.
+
+```sh
+sh tools/install-vbcc.sh
+python3 tools/run-kr16.py --compiler vbcc --optimization 0 --json build/reports/kr16-vbcc-O0.json
+python3 tools/run-kr16.py --compiler vbcc --optimization 2 --json build/reports/kr16-vbcc-O2.json
+```
+
+The compiler uses `-cpu=6809` and `-O=0` or `-O=1023` (the compiler optimization
+mask selected by `vc -O2`). Sources are compiled separately without whole-program
+optimization. Both configurations use vasm's standard branch and offset relaxation.
+The same USIM harness passes the first argument and result in D. vlink emits
+S-records at address `$2800`; only referenced helpers from the supplied `libvc.a`
+are linked. Benchmark code counts the linked `.text` sections of test objects,
+including separately compiled support functions; complete program size includes
+harness and runtime helpers. These are bare-metal USIM binaries, not OS-9 modules.
+
+For native macOS testing, build `vbcchc12` with `TARGET=hc12` from the bundled
+`vbcc.tar.gz`, and `vasm6809_std` with `CPU=6809 SYNTAX=std` from `vasm.tar.gz`.
+Place those binaries and a native vlink in `build/vbcc/bin`, and copy the bundled
+`targets` directory to `build/vbcc/targets`. Native linker versions are recorded
+in reports; CI uses the complete pinned Linux distribution.
+
+The optimized build currently fails `signed16`: seed `0` returns `$91B2`
+instead of `$ED62`. All four seeds disagree. The unoptimized build passes;
+the report excludes the failing optimized result from size rankings. The
+cause has not yet been isolated to compiler code generation or a runtime helper.

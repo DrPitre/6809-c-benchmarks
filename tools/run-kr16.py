@@ -20,7 +20,7 @@ spec.loader.exec_module(cmoc_adapter)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--compiler', choices=('c3', 'cmoc', 'llvm'), required=True)
+    parser.add_argument('--compiler', choices=('c3', 'cmoc', 'llvm', 'vbcc'), required=True)
     parser.add_argument('--optimization', choices=('0', '2'), required=True)
     parser.add_argument('--json', type=Path, required=True)
     args = parser.parse_args()
@@ -31,7 +31,7 @@ def main():
     env = os.environ.copy()
     env['C3BASE'] = str(c3base)
     env['C3LW_HOME'] = str(c3base / 'lwbackend')
-    env['PATH'] = str(ROOT / 'build/llvm/bin') + os.pathsep + os.pathsep.join(str(c3base / 'build/unix' / stage)
+    env['PATH'] = str(ROOT / 'build/vbcc/bin') + os.pathsep + str(ROOT / 'build/llvm/bin') + os.pathsep + os.pathsep.join(str(c3base / 'build/unix' / stage)
                                  for stage in ('exec', 'prep', 'comp', 'optx')) + os.pathsep + str(c3base / 'lwbackend') + os.pathsep + str(toolchain / 'bin') + os.pathsep + env['PATH']
     report = {'compiler': args.compiler.upper(), 'suite': 'kr16',
               'target': '6809 / USIM bare-metal', 'kind': 'runtime',
@@ -40,14 +40,15 @@ def main():
               'emulator': 'USIM bundled with CMOC 0.1.99', 'cycles': None}
     (build / 'commands.log').write_text('')
 
-    def run(command):
+    def run(command, version_probe=False):
         report['commands'].append(command)
         result = subprocess.run(command, cwd=build, env=env, capture_output=True,
                                 text=True, timeout=60)
         with (build / 'commands.log').open('a') as log:
             log.write(json.dumps(command) + '\n' + result.stdout + result.stderr)
-        result.check_returncode()
-        return result.stdout
+        if not version_probe or result.returncode not in (0, 1):
+            result.check_returncode()
+        return result.stdout + result.stderr if version_probe else result.stdout
 
     try:
         if args.compiler == 'c3':
@@ -58,6 +59,11 @@ def main():
             report['toolchain_revision'] = revision
             report['version'] = 'C3 ' + revision[:12]
             libraries = ['-L' + str(c3base / 'lwbackend'), '-lc3lw']
+        elif args.compiler == 'vbcc':
+            report['version'] = run(['vbcchc12'], version_probe=True).splitlines()[0]
+            report['release'] = '6809 Release 1 Preview (2026-01-25)'
+            report['release_url'] = 'http://www.compilers.de/vbcc6809_20260125.zip'
+            libraries = ['-L' + str(ROOT / 'build/vbcc/targets/6809-sim/lib'), '-lvc']
         elif args.compiler == 'llvm':
             report['version'] = run(['mc6809-clang', '--version']).splitlines()[0]
             if 'llvm-mc6809 1.0 b9af0417885deb8e878ba50e59f90bb8037577f7' not in report['version']:
@@ -69,7 +75,35 @@ def main():
         else:
             report['version'] = run(['cmoc', '--version']).strip()
             libraries = ['-L' + str(toolchain / 'share/cmoc/lib'), '-lcmoc-std-usim', '-lcmoc-crt-usim']
-        if args.compiler == 'llvm':
+        if args.compiler == 'vbcc':
+            report['assembler_version'] = run(['vasm6809_std'], version_probe=True).splitlines()[0]
+            report['linker_version'] = run(['vlink', '-v'], version_probe=True).splitlines()[0]
+            # Select ABI branches from the same harness, then translate directives.
+            lines, active = [], [True]
+            for line in (ROOT / 'adapters/kr16-usim.asm').read_text().splitlines():
+                words = line.split()
+                if not words or line.lstrip().startswith(';'):
+                    continue
+                op = words[0]
+                if op == 'ifdef':
+                    active.append(active[-1] and words[1] == 'VBCC_ABI')
+                elif op == 'else':
+                    active[-1] = active[-2] and not active[-1]
+                elif op == 'endc':
+                    active.pop()
+                elif active[-1]:
+                    if op == 'section':
+                        line = '        .section .start,\"ax\"'
+                    elif op == 'endsection':
+                        continue
+                    elif op in ('export', 'import'):
+                        line = '        .global ' + words[1]
+                    elif not line.startswith(' '):
+                        line += ':'
+                    lines.append(line.replace('$', '0x'))
+            (build / 'harness.s').write_text('\n'.join(lines) + '\n')
+            run(['vasm6809_std', '-Fvobj', '-o', 'harness.o', 'harness.s'])
+        elif args.compiler == 'llvm':
             report['assembler_version'] = 'LLVM integrated assembler (same release as clang)'
             report['linker_version'] = run(['mc6809-ld', '--version']).strip()
             # Translate only assembler directives/label spelling, preserving the
@@ -125,6 +159,11 @@ def main():
                             run(['c3optx', assembly, stem + '.opt.a'])
                             assembly = stem + '.opt.a'
                         run(['c3-as', assembly, '-o=' + stem + '.o'])
+                    elif args.compiler == 'vbcc':
+                        run(['vbcchc12', '-cpu=6809', '-O=' + ('0' if args.optimization == '0' else '1023'),
+                             stem + '.c', '-o=' + stem + '.s'])
+                        run(['vasm6809_std', '-nowarn=62', '-opt-branch', '-opt-offset', '-Fvobj',
+                             '-o', stem + '.o', stem + '.s'])
                     elif args.compiler == 'llvm':
                         run(['mc6809-clang', '-mcpu=mc6809', '-std=c89', '-fno-pie', '-fno-lto',
                              '-O' + args.optimization, '-save-temps=obj', '-c', '-o', stem + '.o', stem + '.c'])
@@ -132,7 +171,11 @@ def main():
                         run(['cmoc', '--usim', '-O' + args.optimization, '-i', '-c', '-o', stem + '.o', stem + '.c'])
                     objects.append(stem + '.o')
                 phase = 'linking'
-                if args.compiler == 'llvm':
+                if args.compiler == 'vbcc':
+                    maptext = run(['vlink', '-b', 'srec19', '-T', str(ROOT / 'adapters/kr16-vbcc.ld'),
+                                   '-M', '-o', name + '.srec', 'harness.o', *objects, *libraries])
+                    (build / (name + '.map')).write_text(maptext)
+                elif args.compiler == 'llvm':
                     run(['mc6809-ld', '-T', str(ROOT / 'adapters/kr16-llvm.ld'),
                          '-Map=' + name + '.map', '-o', name + '.elf', 'harness.o', *objects, *libraries])
                     run(['mc6809-objcopy', '-O', 'srec', name + '.elf', name + '.srec'])
@@ -148,7 +191,15 @@ def main():
                 if actual != expected:
                     row.update(error='Checksum mismatch', failure_stage='verification')
                 phase = 'size measurement'
-                if args.compiler == 'llvm':
+                if args.compiler == 'vbcc':
+                    total = 0
+                    for obj in objects:
+                        sections = re.findall(r'^\s+([0-9a-fA-F]+) - ([0-9a-fA-F]+) ' + re.escape(obj) + r'\(\.text\)', maptext, re.M)
+                        if len(sections) != 1:
+                            raise ValueError('Expected one vbcc benchmark text section per object')
+                        total += int(sections[0][1], 16) - int(sections[0][0], 16)
+                    row['kernel_code_bytes'] = total
+                elif args.compiler == 'llvm':
                     sizes = run(['mc6809-size', '-A', *objects])
                     sections = re.findall(r'^\.text(?:\.\S+)?\s+(\d+)\s+\d+\s*$', sizes, re.M)
                     if not sections:

@@ -9,7 +9,7 @@ from shared_suite import BENCHMARKS, LABELS, PURPOSES, sources
 from pathlib import Path
 
 C89_BENCHMARKS = ("crc16", "insertion_sort", "mix16")
-COMPILERS = ("C3", "CMOC", "LLVM")
+COMPILERS = ("C3", "CMOC", "LLVM", "VBCC")
 
 
 @dataclass(frozen=True)
@@ -51,17 +51,30 @@ def render(reports):
         markdown.extend([text, ""])
         content.append("<p>" + html.escape(text) + "</p>")
 
-    def table(title, headers, rows, highlights=None):
+    def table(title, headers, rows, highlights=None, grouped=False):
         markdown.extend(["## " + title, ""])
         content.append("<h2>" + html.escape(title) + "</h2>")
         def mdrow(cells):
             return "| " + " | ".join(("[" + c.label + "](" + c.url + ")" if isinstance(c, SourceLink) else str(c)).replace("|", "\\|").replace("\n", " ") for c in cells) + " |"
         markdown.extend([mdrow(headers), mdrow(["---"] * len(headers))])
-        markdown.extend(mdrow(row) for row in rows)
+        spans = {}
+        if grouped:
+            for i, row in enumerate(rows):
+                if i == 0 or row[0] != rows[i - 1][0]:
+                    spans[i] = 1
+                    start = i
+                else:
+                    spans[start] += 1
+        markdown.extend(mdrow(([""] + list(row[1:])) if grouped and i not in spans else row)
+                        for i, row in enumerate(rows))
         markdown.append("")
         def tr(cells, tag, row_index=-1):
             result = []
             for column, cell in enumerate(cells):
+                if grouped and row_index >= 0 and column == 0 and row_index not in spans:
+                    continue
+                cell_tag = "th" if grouped and row_index >= 0 and column == 0 else tag
+                attributes = (' rowspan="' + str(spans[row_index]) + '" scope="rowgroup"') if grouped and row_index >= 0 and column == 0 else ""
                 value = html.escape(str(cell))
                 if isinstance(cell, SourceLink):
                     value = '<a href="' + html.escape(cell.url, quote=True) + '">' + value + '</a>'
@@ -73,12 +86,12 @@ def render(reports):
                     value = "<strong>" + value + "</strong>"
                 if cell == "PASS":
                     classes.append("pass")
-                result.append(f'<{tag} class="' + " ".join(classes) + '">' + value + f'</{tag}>')
-            return "<tr>" + "".join(result) + "</tr>"
+                result.append(f'<{cell_tag}' + attributes + ' class="' + " ".join(classes) + '">' + value + f'</{cell_tag}>')
+            return ('<tr class="group-start">' if grouped and row_index in spans else "<tr>") + "".join(result) + "</tr>"
         content.append('<div class="scroll"><table><thead>' + tr(headers, "th") +
                        "</thead><tbody>" + "".join(tr(r, "td", i) for i, r in enumerate(rows)) + "</tbody></table></div>")
 
-    paragraph("C3, CMOC, and LLVM-MC6809, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes; lower is smaller. Timing is not measured.")
+    paragraph("C3, CMOC, LLVM-MC6809, and vbcc, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes; lower is smaller. Timing is not measured.")
     shared = {}
     for report in reports:
         if report.get("suite") != "kr16":
@@ -94,7 +107,7 @@ def render(reports):
             shared[key] = row
 
     shared_revision = next((r["revision"] for r in reports if r.get("suite") == "kr16"), "local")
-    labels = LABELS
+    labels = {name: source_link(LABELS[name], "benchmarks/kr16/" + name + ".c", shared_revision) for name in BENCHMARKS}
     for metric, title in (("kernel_code_bytes", "Benchmark code size"),
                           ("loaded_bytes", "Complete test program size")):
         rows, highlights = [], set()
@@ -120,25 +133,27 @@ def render(reports):
                     if len(winners) != len(values):
                         highlights.update((len(rows), i + 2) for i in winners)
                 rows.append([labels[name], "On" if enabled else "Off", *values, difference])
-        table(title, ["Benchmark", "Optimization", *COMPILERS, "Smallest"], rows, highlights)
+        table(title, ["Benchmark", "Optimization", *COMPILERS, "Smallest"], rows, highlights, grouped=True)
     paragraph("Benchmark code size measures all test-supplied functions, including separately compiled support functions. Complete test program size also includes compiler helpers and the test runner, so its ranking can differ. Both measure bytes loaded into memory, excluding uninitialized storage and file-format overhead. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
-    paragraph("Optimization on means C3's default optimizer and CMOC/LLVM -O2; off disables C3's optimizer and uses CMOC/LLVM -O0. These settings do not imply identical optimization passes.")
+    paragraph("Optimization on means C3's default optimizer and CMOC/LLVM -O2 plus vbcc -O=1023 (vc -O2); off disables C3's optimizer and uses CMOC/LLVM -O0 and vbcc -O=0. vbcc uses its standard assembler branch/offset relaxation at both settings. These settings do not imply identical optimization passes.")
     statuses = []
     for name in BENCHMARKS:
-        statuses.append([labels[name]] + [shared.get((name, enabled, compiler), {}).get("status", "NOT RUN")
-                                         for enabled in (True, False) for compiler in COMPILERS])
-    table("Shared-suite correctness", ["Benchmark"] + [compiler + " " + setting for setting in ("on", "off") for compiler in COMPILERS], statuses)
+        for enabled in (True, False):
+            statuses.append([labels[name], "On" if enabled else "Off"] +
+                            [shared.get((name, enabled, compiler), {}).get("status", "NOT RUN")
+                             for compiler in COMPILERS])
+    table("Shared-suite correctness", ["Benchmark", "Optimization", *COMPILERS], statuses, grouped=True)
     failures = []
     for report in reports:
         if report.get("suite") != "kr16":
             continue
         for row in report["rows"]:
             if row["status"] != "PASS":
-                failures.append([report["compiler"], report["flags"], labels.get(row["benchmark"], row["benchmark"]),
+                failures.append([labels.get(row["benchmark"], row["benchmark"]), report["compiler"], report["flags"],
                                  row.get("failure_stage", "Unknown"), row.get("error", "Checksum mismatch")])
     if failures:
-        table("Failures requiring investigation", ["Compiler", "Flags", "Benchmark", "Stage", "Diagnostic"], failures)
-    paragraph("PASS means all four seeds match independent reference results. Source links are collected under Test purposes and source files. The shared sort uses unsigned words and 16-bit arithmetic; it is a distinct workload from the original C89 byte sort.")
+        table("Failures requiring investigation", ["Benchmark", "Compiler", "Flags", "Stage", "Diagnostic"], sorted(failures, key=lambda row: str(row[0])), grouped=True)
+    paragraph("PASS means all four seeds match independent reference results. Each linked benchmark name groups its optimization settings. Supporting files are linked under Test purposes and source files. The shared sort uses unsigned words and 16-bit arithmetic; it is a distinct workload from the original C89 byte sort.")
     content.append("<details><summary>Test purposes and source files</summary>")
     source_rows = []
     for name in BENCHMARKS:
@@ -168,17 +183,19 @@ def render(reports):
             rows.append([report.get("version", report["compiler"]), report.get("target", "Host"), report["flags"]] +
                         [statuses.get(name, "NOT RUN") for name in names])
         table(title, ["Compiler", "Target", "Flags", *names], rows)
-    paragraph("The shared kr16 suite uses identical K&R-compatible source for C3, CMOC, and LLVM, 16-bit unsigned arithmetic, and one bare-metal harness. Its sort stores values in unsigned words; the original C89 sort uses bytes and 32-bit arithmetic. Compare sizes within a suite, not between suites.")
+    paragraph("The shared kr16 suite uses identical K&R-compatible source for C3, CMOC, LLVM, and vbcc, 16-bit unsigned arithmetic, and one bare-metal harness. Its sort stores values in unsigned words; the original C89 sort uses bytes and 32-bit arithmetic. Compare sizes within a suite, not between suites.")
     sizes = []
     for report in reports:
         if report.get("kind") == "compile-compatibility" or not report.get("target", "").startswith("6809"):
             continue
         for row in report["rows"]:
             valid = row["status"] == "PASS"
-            sizes.append([report.get("suite", "c89"), report.get("version", report["compiler"]), report["flags"], LABELS.get(row["benchmark"], row["benchmark"]),
+            sizes.append([source_link(report.get("suite", "c89") + ": " + LABELS.get(row["benchmark"], row["benchmark"]),
+                                      ("benchmarks/kr16/" if report.get("suite") == "kr16" else "benchmarks/") + row["benchmark"] + ".c", report["revision"]),
+                          report.get("version", report["compiler"]), report["flags"],
                           row.get("kernel_code_bytes", "Unavailable") if valid else "Excluded (FAIL)",
                           row.get("loaded_bytes", "Unavailable") if valid else "Excluded (FAIL)", "Not measured"])
-    table("6809 sizes (bytes)", ["Suite", "Compiler", "Flags", "Benchmark", "Benchmark code", "Complete test program", "Cycles"], sizes)
+    table("6809 sizes (bytes)", ["Benchmark", "Compiler", "Flags", "Benchmark code", "Complete test program", "Cycles"], sorted(sizes, key=lambda row: str(row[0])), grouped=True)
     paragraph("Benchmark code excludes compiler helper routines. Complete test program size includes the test runner and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The kr16 harness passes each seed in D and on the stack for C3/CMOC; LLVM's branch moves the argument and result through X. LLVM reserves 24 bytes of direct-page register scratch RAM, excluded from complete test program bytes. Its release is pinned to 1.0, with plain 6809 code, -std=c89, -fno-pie, and no LTO. C3 stack-check calls use a no-op stub; these bounded benchmark functions have a reserved 4 KiB stack and no static storage. These are bare-metal benchmark tests, not OS-9 application tests.")
     content.append("</details>")
     compatibility = [r for r in reports if r.get("kind") == "compile-compatibility"]
@@ -204,7 +221,7 @@ def render(reports):
     document = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
                 '<title>6809 compiler matrix</title><style>body{font:16px/1.55 system-ui;margin:2rem auto;padding:0 1.25rem;max-width:72rem;color:#172b3a;background:#f8fafc}h1{line-height:1.15}h2{margin-top:2rem;font-size:1.25rem}'
-                'table{border-collapse:collapse;width:100%;background:white}th,td{border-bottom:1px solid #dbe3eb;padding:.65rem .8rem;text-align:left;white-space:nowrap}th{background:#eaf0f6;font-size:.9rem}td:nth-child(2){white-space:normal}.number{font-variant-numeric:tabular-nums;text-align:right}.smaller{background:#e0f2e9;color:#15583a}.pass{color:#15583a}tbody tr:nth-child(2n){border-bottom:2px solid #bccbd8}'
+                'table{border-collapse:collapse;width:100%;background:white}th,td{border-bottom:1px solid #dbe3eb;padding:.65rem .8rem;text-align:left;white-space:nowrap}th{background:#eaf0f6;font-size:.9rem}td:nth-child(2){white-space:normal}.number{font-variant-numeric:tabular-nums;text-align:right}.smaller{background:#e0f2e9;color:#15583a}.pass{color:#15583a}tr.group-start{border-top:2px solid #bccbd8}tbody th[scope=rowgroup]{vertical-align:middle;background:#f0f5fa;font-size:1rem}tbody th a{white-space:normal}'
                 '.scroll{overflow:auto;border:1px solid #dbe3eb;border-radius:8px}p{max-width:65rem}details{margin:1.5rem 0;padding:1rem;background:white;border:1px solid #dbe3eb;border-radius:8px}summary{cursor:pointer;font-weight:600}a{color:#145daa}@media(max-width:600px){body{margin:1rem auto;padding:0 .75rem}th,td{padding:.5rem}} </style></head><body>' + "".join(content) + '</body></html>')
     return "\n".join(markdown), document
 

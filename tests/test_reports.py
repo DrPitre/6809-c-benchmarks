@@ -59,9 +59,9 @@ class ReportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_shared_sources(reports)
 
-    def test_three_compiler_gap_uses_next_smallest_and_requires_valid_results(self):
+    def test_four_compiler_gap_uses_next_smallest_and_requires_valid_results(self):
         reports = []
-        for compiler, size in (("C3", 467), ("CMOC", 374), ("LLVM", 430)):
+        for compiler, size in (("C3", 467), ("CMOC", 374), ("LLVM", 430), ("VBCC", 480)):
             reports.append({"compiler": compiler, "suite": "kr16", "kind": "runtime",
                             "target": "6809 / USIM bare-metal", "revision": "abc",
                             "flags": "optimizer on" if compiler == "C3" else "-O2",
@@ -69,10 +69,10 @@ class ReportTests(unittest.TestCase):
                                       "source_sha256": "same", "loaded_bytes": size,
                                       "kernel_code_bytes": size}]})
         markdown, _ = render(reports)
-        self.assertIn("| On | 467 | 374 | 430 | CMOC by 56 B |", markdown)
+        self.assertIn("| On | 467 | 374 | 430 | 480 | CMOC by 56 B |", markdown)
         reports[-1]["rows"][0]["status"] = "FAIL"
         markdown, _ = render(reports)
-        self.assertIn("| On | 467 | 374 | Excluded (FAIL) | — |", markdown)
+        self.assertIn("| On | 467 | 374 | 430 | Excluded (FAIL) | — |", markdown)
 
     def test_source_links_pin_report_revision(self):
         revision = 'a' * 40
@@ -84,8 +84,12 @@ class ReportTests(unittest.TestCase):
         markdown, document = render([report])
         self.assertIn('/blob/' + revision + '/benchmarks/kr16/support/step3.c', document)
         self.assertIn('[calls16.c](' + link.url + ')', markdown)
-        self.assertEqual(markdown.count('](' + link.url + ')'), 1)
-        self.assertEqual(document.count('href="' + link.url + '"'), 1)
+        # Each comparison table has one linked name spanning both settings.
+        for title in ('Benchmark code size', 'Complete test program size', 'Shared-suite correctness'):
+            section = document.split('<h2>' + title + '</h2>')[1].split('</table>')[0]
+            self.assertEqual(section.count('href="' + link.url + '"'), 1)
+            self.assertIn('rowspan="2" scope="rowgroup"', section)
+        self.assertIn('|  | Off |', markdown)
 
 
 if __name__ == '__main__':
