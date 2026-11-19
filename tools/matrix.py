@@ -94,7 +94,7 @@ def render(reports):
             shared[key] = row
 
     shared_revision = next((r["revision"] for r in reports if r.get("suite") == "kr16"), "local")
-    labels = {name: source_link(LABELS[name], "benchmarks/kr16/" + name + ".c", shared_revision) for name in BENCHMARKS}
+    labels = LABELS
     for metric, title in (("kernel_code_bytes", "Benchmark code size"),
                           ("loaded_bytes", "Complete test program size")):
         rows, highlights = [], set()
@@ -138,7 +138,7 @@ def render(reports):
                                  row.get("failure_stage", "Unknown"), row.get("error", "Checksum mismatch")])
     if failures:
         table("Failures requiring investigation", ["Compiler", "Flags", "Benchmark", "Stage", "Diagnostic"], failures)
-    paragraph("PASS means all four seeds match independent reference results. Benchmark names link to the source revision used in this report. The shared sort uses unsigned words and 16-bit arithmetic; it is a distinct workload from the original C89 byte sort.")
+    paragraph("PASS means all four seeds match independent reference results. Source links are collected under Test purposes and source files. The shared sort uses unsigned words and 16-bit arithmetic; it is a distinct workload from the original C89 byte sort.")
     content.append("<details><summary>Test purposes and source files</summary>")
     source_rows = []
     for name in BENCHMARKS:
@@ -146,6 +146,11 @@ def render(reports):
             source_rows.append([LABELS[name], PURPOSES[name] if index == 0 else "Separately compiled supporting function",
                                 source_link(path, "benchmarks/kr16/" + path, shared_revision)])
     table("Test sources", ["Benchmark", "What it exercises", "Source"], source_rows)
+    original_revision = next((r["revision"] for r in reports if r.get("suite") != "kr16"), None)
+    if original_revision:
+        table("Original C89 sources", ["Benchmark", "Source"], [
+            [LABELS[name], source_link(name + ".c", "benchmarks/" + name + ".c", original_revision)]
+            for name in C89_BENCHMARKS])
     content.append("</details>")
     content.append("<details><summary>Compiler versions, original-suite results, and measurement details</summary>")
 
@@ -170,7 +175,7 @@ def render(reports):
             continue
         for row in report["rows"]:
             valid = row["status"] == "PASS"
-            sizes.append([report.get("suite", "c89"), report.get("version", report["compiler"]), report["flags"], source_link(LABELS.get(row["benchmark"], row["benchmark"]), ("benchmarks/kr16/" if report.get("suite") == "kr16" else "benchmarks/") + row["benchmark"] + ".c", report["revision"]),
+            sizes.append([report.get("suite", "c89"), report.get("version", report["compiler"]), report["flags"], LABELS.get(row["benchmark"], row["benchmark"]),
                           row.get("kernel_code_bytes", "Unavailable") if valid else "Excluded (FAIL)",
                           row.get("loaded_bytes", "Unavailable") if valid else "Excluded (FAIL)", "Not measured"])
     table("6809 sizes (bytes)", ["Suite", "Compiler", "Flags", "Benchmark", "Benchmark code", "Complete test program", "Cycles"], sizes)

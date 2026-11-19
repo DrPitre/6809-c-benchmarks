@@ -260,9 +260,9 @@ program size. Report hashes cover every source file for a test. The runtime
 error hook stops USIM with a nonzero status if a C3 arithmetic helper reports
 an error; it does not silently return success.
 
-Benchmark names on the report link to the source at the exact Git commit used
-by CI. Expand **Test purposes and source files** for descriptions and links
-to supporting source files. Local previews without a commit ID use `main`.
+Expand **Test purposes and source files** for descriptions and one link per
+source file, including supporting functions and the original C89 suite. Links
+point to the exact Git commit used by CI. Local previews without a commit ID use `main`.
 
 ### Failure discovered by the expanded suite
 

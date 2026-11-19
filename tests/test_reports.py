@@ -80,10 +80,12 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(link.url, 'https://github.com/DrPitre/6809-c-benchmarks/blob/' + revision + '/benchmarks/kr16/calls16.c')
         report = {'compiler': 'C3', 'suite': 'kr16', 'kind': 'runtime',
                   'target': '6809 / USIM bare-metal', 'revision': revision,
-                  'flags': 'optimizer on', 'rows': []}
+                  'flags': 'optimizer on', 'rows': [{'benchmark': 'calls16', 'status': 'PASS', 'source_sha256': 'b' * 64}]}
         markdown, document = render([report])
         self.assertIn('/blob/' + revision + '/benchmarks/kr16/support/step3.c', document)
-        self.assertIn('[Function calls](' + link.url + ')', markdown)
+        self.assertIn('[calls16.c](' + link.url + ')', markdown)
+        self.assertEqual(markdown.count('](' + link.url + ')'), 1)
+        self.assertEqual(document.count('href="' + link.url + '"'), 1)
 
 
 if __name__ == '__main__':
