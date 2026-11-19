@@ -82,6 +82,9 @@ def render(reports):
     validate_shared_sources(reports)
     markdown = ["# 6809 C compiler benchmark matrix", ""]
     content = ["<h1>6809 C compiler benchmark matrix</h1>"]
+    repository = "https://github.com/DrPitre/6809-c-benchmarks"
+    markdown.extend(["[View repository on GitHub](" + repository + ")", ""])
+    content.append('<p><a href="' + repository + '">View repository on GitHub</a></p>')
 
     def paragraph(text):
         markdown.extend([text, ""])
