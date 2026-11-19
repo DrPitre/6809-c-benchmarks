@@ -21,11 +21,15 @@ class AssemblyReportTests(unittest.TestCase):
         self.assertIn('[100](' + url + ')', markdown)
         self.assertIn('href="' + url + '">200</a>', document)
         self.assertIn('class="number"><a', document)
+        self.assertEqual(url, assembly_url(dict(report, compiler='C3', flags='optimizer on'), row))
         self.assertNotEqual(url, assembly_url(dict(report, flags='-O0'), row))
         with tempfile.TemporaryDirectory() as directory:
             publish_assembly([report], directory)
             page = (Path(directory) / url).read_text()
             self.assertIn('step3.s', page)
+            for compiler in ('C3', 'CMOC', 'LLVM', 'VBCC'):
+                self.assertIn('>' + compiler + '<small>', page)
+            self.assertIn('Assembly unavailable for this build.', page)
             self.assertIn('lda #1 ; &lt;script&gt;', page)
             self.assertIn('calls16.o .text 100', page)
             self.assertIn('a' * 40, page)

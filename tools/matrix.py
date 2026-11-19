@@ -138,7 +138,7 @@ def render(reports):
         content.append('<div class="scroll"><table><thead>' + tr(headers, "th") +
                        "</thead><tbody>" + "".join(tr(r, "td", i) for i, r in enumerate(rows)) + "</tbody></table></div>")
 
-    paragraph("C3, CMOC, LLVM-MC6809, and vbcc, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes; click a size to view its generated assembly and linker map. Executed instruction counts cover four seed runs. Lower is better for both metrics; CPU cycles are not measured.")
+    paragraph("C3, CMOC, LLVM-MC6809, and vbcc, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes; click a size to compare all four assembly outputs side by side. Executed instruction counts cover four seed runs. Lower is better for both metrics; CPU cycles are not measured.")
     content.append('<section class="versions">')
     versions = []
     for compiler in COMPILERS:

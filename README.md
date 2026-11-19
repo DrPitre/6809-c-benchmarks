@@ -356,8 +356,10 @@ addressing and taken-branch penalties; host elapsed time is not a substitute.
 ### Assembly linked from size measurements
 
 Click any individual benchmark or complete-program size in the HTML or Markdown
-matrix to view that compiler's generated assembly for the exact test and optimizer
-setting. Each page includes all test compilation units (including support functions),
+matrix to compare all four compilers' generated assembly side by side for that
+test and optimizer setting. Matching source files align across columns, with
+independently scrollable assembly panes and explicit failed-build diagnostics.
+Each page includes all test compilation units (including support functions),
 compiler version, source revision, and linker map. C3's optimized view retains the
 output of `c3optx`; the other compilers retain their `.s` assembler inputs.
 These pages contain compiler output rather than a disassembly of linked library
