@@ -5,6 +5,8 @@
 ; Output is seed/result in hex.
         section start
         export start
+        export bench_begin
+        export bench_end
         ifdef LLVM_ABI
         import bench_run
         else
@@ -41,6 +43,7 @@ sample
         lda #32
         sta $ff00
         ldd ,s
+bench_begin
         ifdef LLVM_ABI
         tfr d,x
         lbsr bench_run
@@ -56,6 +59,7 @@ sample
         endc
         endc
         endc
+bench_end
         leas 2,s
         lbsr hexword
         lda #10

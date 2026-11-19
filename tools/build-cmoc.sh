@@ -24,8 +24,10 @@ tar -xzf ../downloads/cmoc-0.1.99.tar.gz
 make -C lwtools-4.24 -j2
 make -C lwtools-4.24 install PREFIX="$prefix"
 export PATH="$prefix/bin:$PATH"
+python3 "$root/tools/instrument-usim.py" cmoc-0.1.99/src/usim-0.91-cmoc
 cd cmoc-0.1.99
 ./configure --prefix="$prefix"
 make -j2
 make install
 cp src/usim-0.91-cmoc/usim "$prefix/bin/usim"
+python3 "$root/tools/check-usim-count.py"

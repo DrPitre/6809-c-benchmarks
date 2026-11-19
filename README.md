@@ -14,7 +14,7 @@ reference results for four seeds before their sizes enter the comparison.
 
 The original C89 suite remains available. CMOC runs it; C3's source-compatibility
 limitations appear separately in collapsed diagnostics on the published page.
-Cycle timing is not implemented yet.
+Executed instruction counts are measured for the shared suite. CPU cycle timing is not implemented yet.
 
 ## Run the checks
 
@@ -323,3 +323,31 @@ Ties share a place at two-decimal precision. Total bytes and full-suite pass
 counts appear alongside the score; exclusions are listed for each setting.
 This ranking excludes runtime helpers and the harness and describes this
 benchmark suite, not general compiler correctness or all C workloads.
+
+
+### Executed instruction counts
+
+The shared suite records instructions executed in USIM for each of the four
+seeds and their sum. A small opt-in patch to the pinned CMOC USIM source counts
+one instruction per CPU execution step; a prefixed opcode still counts as one.
+Each build checks the counter against a hand-counted assembly program: two
+calls of exactly 11 instructions, including a loop, subroutine, and prefixed LDY.
+
+Exported `bench_begin`/`bench_end` labels delimit the measurement without adding
+any target instructions or changing binary size. The range includes the call,
+return, LLVM's ABI register transfers, all benchmark support functions, and
+linked runtime helpers (including C3's no-op stack-check RTS). It excludes startup,
+loading the seed, printing results, and the harness's argument-stack cleanup.
+Linker maps supply the boundary addresses for each compiler. During counted
+bare-metal runs USIM's host-clock IRQ trigger is disabled for deterministic results.
+
+The report shows the total across all four seeds; `instructions_by_seed` in
+raw JSON and `*.instructions.log` artifacts preserve individual measurements.
+A missing or incomplete counter is an error, never a zero measurement. Incorrect
+results retain their diagnostic counts in raw data but are excluded from report
+rankings. Original C89/host probes do not have instruction counts.
+
+Instruction count is **not cycle count**: addressing modes, branches, and other
+6809 operations have different cycle costs. Accurate cycles would require a
+validated cycle-accounting implementation in the simulator, including indexed
+addressing and taken-branch penalties; host elapsed time is not a substitute.

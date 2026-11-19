@@ -124,7 +124,7 @@ def render(reports):
                     rank = ranks[row_index, column]
                     ordinal = ("1st", "2nd", "3rd", "4th")[rank - 1]
                     value += (' <span class="rank rank-' + str(rank) + '" title="' + ordinal +
-                              ' place by size in this row">' + ordinal + '</span>')
+                              ' place for this metric in this row">' + ordinal + '</span>')
                 if cell == "PASS":
                     classes.append("pass")
                 elif cell in ("FAIL", "COMPILE FAIL", "Excluded (FAIL)"):
@@ -134,7 +134,7 @@ def render(reports):
         content.append('<div class="scroll"><table><thead>' + tr(headers, "th") +
                        "</thead><tbody>" + "".join(tr(r, "td", i) for i, r in enumerate(rows)) + "</tbody></table></div>")
 
-    paragraph("C3, CMOC, LLVM-MC6809, and vbcc, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes; lower is smaller. Timing is not measured.")
+    paragraph("C3, CMOC, LLVM-MC6809, and vbcc, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes. Executed instruction counts cover four seed runs. Lower is better for both metrics; CPU cycles are not measured.")
     content.append('<section class="versions">')
     versions = []
     for compiler in COMPILERS:
@@ -179,7 +179,8 @@ def render(reports):
     shared_revision = next((r["revision"] for r in reports if r.get("suite") == "kr16"), "local")
     labels = {name: source_link(LABELS[name], "benchmarks/kr16/" + name + ".c", shared_revision) for name in BENCHMARKS}
     for metric, title in (("kernel_code_bytes", "Benchmark code size"),
-                          ("loaded_bytes", "Complete test program size")):
+                          ("loaded_bytes", "Complete test program size"),
+                          ("instructions", "Executed instructions (four seeds)")):
         rows, highlights, ranks = [], set(), {}
         for name in BENCHMARKS:
             for enabled in (True, False):
@@ -201,12 +202,14 @@ def render(reports):
                     if len(winners) > 1:
                         difference = "Tie: " + "/".join(COMPILERS[i] for i in winners)
                     else:
-                        difference = COMPILERS[winners[0]] + " by " + str(ordered[1] - ordered[0]) + " B"
+                        difference = COMPILERS[winners[0]] + " by " + str(ordered[1] - ordered[0]) + (" instructions" if metric == "instructions" else " B")
                     if len(winners) != len(values):
                         highlights.update((len(rows), i + 2) for i in winners)
                 rows.append([labels[name], "On" if enabled else "Off", *values, difference])
         table(title, ["Benchmark", "Optimization", *COMPILERS, "Smallest"], rows, highlights, grouped=True, ranks=ranks)
-    paragraph("Benchmark code size measures all test-supplied functions, including separately compiled support functions. Complete test program size also includes compiler helpers and the test runner, so its ranking can differ. Both measure bytes loaded into memory, excluding uninitialized storage and file-format overhead. Badges rank each complete four-compiler row by size (1st is smallest); ties share a place. Rows with failed or missing results have no ranking. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
+        if metric == "instructions":
+            paragraph("Instruction counts sum the four seeds and include the benchmark call/return, ABI register transfers, supporting functions, and linked runtime helpers. Startup, seed loading, result printing, and stack cleanup in the harness are excluded. Prefixed 6809 opcodes count as one instruction. Counts are not CPU cycles: instructions have different costs. Failed results are excluded; per-seed counts remain in the raw JSON and workflow artifacts.")
+    paragraph("Benchmark code size measures all test-supplied functions, including separately compiled support functions. Complete test program size also includes compiler helpers and the test runner, so its ranking can differ. Both measure bytes loaded into memory, excluding uninitialized storage and file-format overhead. Badges rank each complete four-compiler row by its metric (1st is lowest); ties share a place. Rows with failed or missing results have no ranking. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
     paragraph("Optimization on means C3's default optimizer and CMOC/LLVM -O2 plus vbcc -O=1023 (vc -O2); off disables C3's optimizer and uses CMOC/LLVM -O0 and vbcc -O=0. vbcc uses its standard assembler branch/offset relaxation at both settings. These settings do not imply identical optimization passes.")
     statuses = []
     for name in BENCHMARKS:
@@ -266,8 +269,9 @@ def render(reports):
                                       ("benchmarks/kr16/" if report.get("suite") == "kr16" else "benchmarks/") + row["benchmark"] + ".c", report["revision"]),
                           report.get("version", report["compiler"]), report["flags"],
                           row.get("kernel_code_bytes", "Unavailable") if valid else "Excluded (FAIL)",
-                          row.get("loaded_bytes", "Unavailable") if valid else "Excluded (FAIL)", "Not measured"])
-    table("6809 sizes (bytes)", ["Benchmark", "Compiler", "Flags", "Benchmark code", "Complete test program", "Cycles"], sorted(sizes, key=lambda row: str(row[0])), grouped=True)
+                          row.get("loaded_bytes", "Unavailable") if valid else "Excluded (FAIL)",
+                          row.get("instructions", "Not measured") if valid else "Excluded (FAIL)"])
+    table("6809 sizes (bytes)", ["Benchmark", "Compiler", "Flags", "Benchmark code", "Complete test program", "Instructions"], sorted(sizes, key=lambda row: str(row[0])), grouped=True)
     paragraph("Benchmark code excludes compiler helper routines. Complete test program size includes the test runner and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The kr16 harness passes each seed in D and on the stack for C3/CMOC; LLVM's branch moves the argument and result through X. LLVM reserves 24 bytes of direct-page register scratch RAM, excluded from complete test program bytes. Its release is pinned to 1.0, with plain 6809 code, -std=c89, -fno-pie, and no LTO. C3 stack-check calls use a no-op stub; these bounded benchmark functions have a reserved 4 KiB stack and no static storage. These are bare-metal benchmark tests, not OS-9 application tests.")
     content.append("</details>")
     compatibility = [r for r in reports if r.get("kind") == "compile-compatibility"]
@@ -287,7 +291,7 @@ def render(reports):
         paragraph("C3 is tested against the unchanged C89 benchmark functions. COMPILE FAIL is an observed compatibility result, not a failed runtime checksum. ACCEPTED probes were compiled, not executed. C3 currently lacks limits.h and rejects unsigned short, unsigned long, and U-suffixed constants. These limitations apply to the original C89 suite; the shared kr16 results above execute real C3-generated code.")
         paragraph("The original compatibility check records rejections; the shared kr16 runtime check requires passing checksums. Infrastructure failures still fail CI. Full diagnostics are included in the raw JSON and workflow artifacts.")
         content.append("</details>")
-    paragraph("USIM is bundled with CMOC 0.1.99. This adapter does not measure cycles. Raw JSON, commands, assembly, linker maps, and executables are available in the workflow artifacts.")
+    paragraph("USIM is bundled with CMOC 0.1.99. The shared-suite adapter counts executed instructions with an opt-in USIM patch; it does not measure CPU cycles. Raw JSON, commands, assembly, linker maps, and executables are available in the workflow artifacts.")
     paragraph("Source revisions: " + ", ".join(sorted({r["revision"] for r in reports})))
     content.append('<p><a href="results.json">Raw result data</a> · <a href="matrix.md">Markdown matrix</a></p>')
     document = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'

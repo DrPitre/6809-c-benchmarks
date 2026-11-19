@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 
+from execution_metrics import boundary_address, instruction_counts
 from check import SEEDS
 from shared_suite import REFERENCES, sources
 
@@ -37,15 +38,18 @@ def main():
               'target': '6809 / USIM bare-metal', 'kind': 'runtime',
               'flags': ('optimizer ' + ('off' if args.optimization == '0' else 'on')) if args.compiler == 'c3' else '-O' + args.optimization,
               'revision': env.get('GITHUB_SHA', 'local'), 'rows': [], 'commands': [],
-              'emulator': 'USIM bundled with CMOC 0.1.99', 'cycles': None}
+              'emulator': 'USIM bundled with CMOC 0.1.99', 'cycles': None,
+              'instruction_scope': 'Four calls including call/return, ABI shims, support functions and runtime helpers; excludes startup and output'}
     (build / 'commands.log').write_text('')
 
-    def run(command, version_probe=False):
+    def run(command, version_probe=False, stderr_file=None):
         report['commands'].append(command)
         result = subprocess.run(command, cwd=build, env=env, capture_output=True,
                                 text=True, timeout=60)
         with (build / 'commands.log').open('a') as log:
             log.write(json.dumps(command) + '\n' + result.stdout + result.stderr)
+        if stderr_file is not None:
+            stderr_file.write_text(result.stderr)
         if not version_probe or result.returncode not in (0, 1):
             result.check_returncode()
         return result.stdout + result.stderr if version_probe else result.stdout
@@ -183,7 +187,14 @@ def main():
                     run(['lwlink', '--format=srec', '--script=' + str(ROOT / 'adapters/kr16-usim.link'),
                          '--map=' + name + '.map', '-o', name + '.srec', 'harness.o', *objects, *libraries])
                 phase = 'execution'
-                output = run(['usim', name + '.srec'])
+                maptext = (build / (name + '.map')).read_text()
+                env['USIM_BENCH_BEGIN'] = format(boundary_address(maptext, 'bench_begin'), 'x')
+                env['USIM_BENCH_END'] = format(boundary_address(maptext, 'bench_end'), 'x')
+                statistics = build / (name + '.instructions.log')
+                output = run(['usim', name + '.srec'], stderr_file=statistics)
+                counts = instruction_counts(statistics.read_text(), SEEDS)
+                row['instructions_by_seed'] = counts
+                row['instructions'] = sum(item['instructions'] for item in counts)
                 actual = [tuple(int(word, 16) for word in line.split()) for line in output.splitlines()]
                 expected = [(seed, reference(seed)) for seed in SEEDS]
                 row.update(status='PASS' if actual == expected else 'FAIL', output=output, expected=expected,
