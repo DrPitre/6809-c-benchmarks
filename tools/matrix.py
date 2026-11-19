@@ -2,6 +2,7 @@
 from assembly_report import assembly_url, publish_assembly
 import argparse
 import html
+import hashlib
 import json
 import math
 import re
@@ -79,13 +80,47 @@ def overall_sizes(shared, enabled):
     return rows, eligible
 
 
-def render(reports):
+def cmoc_version_comparison(reports, previous):
+    def configurations(items):
+        return {(row["benchmark"], report["flags"] == "-O2"): (report, row)
+                for report in items if report.get("suite") == "kr16" and report["compiler"].upper() == "CMOC"
+                for row in report["rows"]}
+    old, new = configurations(previous), configurations(reports)
+    rows = []
+    for name in BENCHMARKS:
+        for enabled in (True, False):
+            old_report, before = old.get((name, enabled), ({}, {}))
+            new_report, after = new.get((name, enabled), ({}, {}))
+            comparable = (before.get("status") == after.get("status") == "PASS" and
+                          before.get("source_sha256") and before.get("source_sha256") == after.get("source_sha256") and
+                          type(before.get("harness_bytes")) is int and before.get("harness_bytes") == after.get("harness_bytes"))
+            cells = [LABELS[name], "On" if enabled else "Off"]
+            for metric in ("code_bytes", "instructions"):
+                values = []
+                for report, row, prefix in ((old_report, before, "history/cmoc-0.1.99/"), (new_report, after, "")):
+                    value = row.get(metric, "Unavailable") if row.get("status") == "PASS" else row.get("status", "Not run")
+                    values.append(value)
+                    url = assembly_url(report, row) if row.get("assembly") else None
+                    cells.append(SourceLink(str(value), prefix + url) if metric == "code_bytes" and isinstance(value, int) and url else value)
+                cells.append(f"{values[1] - values[0]:+d}" if comparable and all(type(v) is int for v in values) else "Not comparable")
+            rows.append(cells)
+    return rows
+
+
+def render(reports, previous_reports=None, historical=False):
     validate_shared_sources(reports)
     markdown = ["# The Grand 6809 C Compiler Bake-Off!", ""]
     content = ["<h1>The Grand 6809 C Compiler Bake-Off!</h1>"]
     repository = "https://github.com/DrPitre/6809-c-benchmarks"
     markdown.extend(["[View repository on GitHub](" + repository + ")", ""])
     content.append('<p><a href="' + repository + '">View repository on GitHub</a></p>')
+
+    if historical:
+        content.append('<p><strong>Historical snapshot: CMOC 0.1.99.</strong> These results are preserved from the published run before the upgrade. <a href="../../index.html">Return to the current Bake-Off</a>.</p>')
+        markdown.extend(["Historical snapshot: CMOC 0.1.99. [Current Bake-Off](../../index.html)", ""])
+    elif previous_reports:
+        content.append('<p><a href="history/cmoc-0.1.99/index.html">Preserved results: CMOC 0.1.99</a> · <a href="#cmoc-release-comparison">Compare CMOC releases</a></p>')
+        markdown.extend(["[Preserved results: CMOC 0.1.99](history/cmoc-0.1.99/index.html)", ""])
 
     def paragraph(text):
         markdown.extend([text, ""])
@@ -153,6 +188,15 @@ def render(reports):
                 seen.add((version, release))
     table("Compiler versions tested", ["Compiler", "Reported version", "Release / revision"], versions)
     content.append('</section>')
+    if previous_reports:
+        cmoc_versions = [re.search(r"\d+\.\d+\.\d+", r.get("version", "")) for r in reports if r["compiler"].upper() == "CMOC"]
+        cmoc_release = next((m.group(0) for m in cmoc_versions if m), "Unavailable")
+        content.append('<details id="cmoc-release-comparison" open><summary>CMOC 0.1.99 → ' + cmoc_release + '</summary>')
+        paragraph(f"Old measurements are preserved from the published CMOC 0.1.99 run; the main rankings use CMOC {cmoc_release}. Negative deltas mean fewer bytes or instructions. Deltas require both results to pass with identical source hashes and harness sizes. Code includes runtime helpers and excludes the harness. Click either size to compare that release's assembly with the other compilers.")
+        table("CMOC release comparison", ["Benchmark", "Optimization", "0.1.99 code (B)", cmoc_release + " code (B)", "Δ bytes", "0.1.99 instructions", cmoc_release + " instructions", "Δ instructions"],
+              cmoc_version_comparison(reports, previous_reports), grouped=True)
+        content.append('</details>')
+
     shared = {}
     assembly_links = {}
     for report in reports:
@@ -328,8 +372,23 @@ def main():
     reports = [json.loads(p.read_text()) for p in sorted(args.input.glob("*.json"))]
     if not reports or (args.expected_reports is not None and len(reports) != args.expected_reports):
         raise SystemExit("Missing reports; refusing to publish an incomplete matrix")
-    markdown, document = render(reports)
+    snapshot = Path(__file__).resolve().parents[1] / 'history/cmoc-0.1.99/results.json'
+    previous = None
+    if snapshot.exists():
+        metadata = json.loads(snapshot.with_name('snapshot.json').read_text())
+        if hashlib.sha256(snapshot.read_bytes()).hexdigest() != metadata['results_sha256']:
+            raise ValueError('Historical snapshot digest mismatch')
+        previous = json.loads(snapshot.read_text())
+    markdown, document = render(reports, previous_reports=previous)
     args.output.mkdir(parents=True, exist_ok=True)
+    if previous:
+        archive = args.output / 'history/cmoc-0.1.99'
+        archive.mkdir(parents=True, exist_ok=True)
+        old_markdown, old_document = render(previous, historical=True)
+        (archive / 'index.html').write_text(old_document)
+        (archive / 'matrix.md').write_text(old_markdown)
+        (archive / 'results.json').write_bytes(snapshot.read_bytes())
+        publish_assembly(previous, archive)
     publish_assembly(reports, args.output)
     (args.output / "matrix.md").write_text(markdown)
     (args.output / "index.html").write_text(document)

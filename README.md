@@ -42,7 +42,7 @@ may be 16 or 32 bits. Historical dialect limitations should be recorded explicit
 ## GitHub Actions
 
 The workflow builds and checks benchmark functions on pushes, pull requests, and manual
-runs using host GCC/Clang and 6809 CMOC, each at `-O0` and `-O2`. CMOC 0.1.99
+runs using host GCC/Clang and 6809 CMOC, each at `-O0` and `-O2`. CMOC 0.1.101
 and LWTOOLS 4.24 are built from SHA-256-verified release archives. USIM is
 built from the CMOC release. The two CMOC and two C3 jobs each record shared kr16 results as well as
 the original-suite results. Together with four host reports, this produces
@@ -377,3 +377,32 @@ Assembly and maps travel in the report JSON, so GitHub Pages publishes them with
 the matching measurements; they do not depend on the retention of Actions artifacts.
 The site reflects the latest run, while each downloadable matrix artifact preserves
 its own assembly pages. Failed measurements do not receive numeric size links.
+
+
+### Preserving compiler releases
+
+The current matrix uses CMOC **0.1.101**, pinned to its official release archive
+and SHA-256. The published CMOC 0.1.99-era results are frozen in
+`history/cmoc-0.1.99/results.json`, including assembly, maps, source hashes,
+instruction counts, and the other compilers' contemporary results.
+`snapshot.json` records the original Git revision, workflow run, and file digest.
+The site rebuilds a separate historical report with its original measurements,
+rankings, source links, and assembly pages; updating a compiler does not replace
+that snapshot. The historical report is clearly labeled and links back to the
+current report.
+
+The current report includes a CMOC 0.1.99 → 0.1.101 table for both optimization
+settings. Negative deltas mean smaller code or fewer instructions. It computes
+deltas only for passing tests with identical source hashes and harness sizes;
+old and new size links open the corresponding release's assembly comparison.
+The main four-compiler rankings use the current release only.
+
+USIM remains pinned to the **0.1.99** archive and the same instruction-counting
+patch for both compiler releases. To reproduce the earlier compiler build:
+
+```sh
+CMOC_VERSION=0.1.99 sh tools/build-cmoc.sh
+```
+
+Running the build script without that override installs 0.1.101. Both source
+archive checksums remain pinned in the script.
