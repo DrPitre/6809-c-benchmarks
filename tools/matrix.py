@@ -32,7 +32,7 @@ def render(reports):
         markdown.extend([text, ""])
         content.append("<p>" + html.escape(text) + "</p>")
 
-    def table(title, headers, rows):
+    def table(title, headers, rows, highlights=None):
         markdown.extend(["## " + title, ""])
         content.append("<h2>" + html.escape(title) + "</h2>")
         def mdrow(cells):
@@ -40,12 +40,73 @@ def render(reports):
         markdown.extend([mdrow(headers), mdrow(["---"] * len(headers))])
         markdown.extend(mdrow(row) for row in rows)
         markdown.append("")
-        def tr(cells, tag):
-            return "<tr>" + "".join(f"<{tag}>" + html.escape(str(c)) + f"</{tag}>" for c in cells) + "</tr>"
+        def tr(cells, tag, row_index=-1):
+            result = []
+            for column, cell in enumerate(cells):
+                value = html.escape(str(cell))
+                classes = []
+                if isinstance(cell, int):
+                    classes.append("number")
+                if highlights and (row_index, column) in highlights:
+                    classes.append("smaller")
+                    value = "<strong>" + value + "</strong>"
+                if cell == "PASS":
+                    classes.append("pass")
+                result.append(f'<{tag} class="' + " ".join(classes) + '">' + value + f'</{tag}>')
+            return "<tr>" + "".join(result) + "</tr>"
         content.append('<div class="scroll"><table><thead>' + tr(headers, "th") +
-                       "</thead><tbody>" + "".join(tr(r, "td") for r in rows) + "</tbody></table></div>")
+                       "</thead><tbody>" + "".join(tr(r, "td", i) for i, r in enumerate(rows)) + "</tbody></table></div>")
 
-    paragraph("PASS means all four seeds matched independent reference results. Host checks do not measure 6809 performance.")
+    paragraph("C3 and CMOC, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes; lower is smaller. Timing is not measured.")
+    shared = {}
+    for report in reports:
+        if report.get("suite") != "kr16":
+            continue
+        compiler = report["compiler"].upper()
+        if compiler not in ("C3", "CMOC"):
+            continue
+        enabled = report["flags"] in ("optimizer on", "-O2")
+        for row in report["rows"]:
+            key = (row["benchmark"], enabled, compiler)
+            if key in shared:
+                raise ValueError("Duplicate shared compiler configuration")
+            shared[key] = row
+
+    labels = {"crc16": "CRC16", "insertion_sort": "Insertion sort", "mix16": "16-bit arithmetic"}
+    for metric, title in (("kernel_code_bytes", "Kernel code comparison"),
+                          ("loaded_bytes", "Loaded program comparison")):
+        rows, highlights = [], set()
+        for name in BENCHMARKS:
+            for enabled in (True, False):
+                values = []
+                for compiler in ("C3", "CMOC"):
+                    result = shared.get((name, enabled, compiler))
+                    if result is None:
+                        values.append("Not run")
+                    elif result["status"] != "PASS":
+                        values.append("Excluded (FAIL)")
+                    else:
+                        values.append(result.get(metric, "Unavailable"))
+                difference = "—"
+                if all(isinstance(v, int) for v in values):
+                    if values[0] == values[1]:
+                        difference = "Tie"
+                    else:
+                        winner = 0 if values[0] < values[1] else 1
+                        highlights.add((len(rows), winner + 2))
+                        difference = ("C3" if winner == 0 else "CMOC") + " by " + str(abs(values[0] - values[1])) + " B"
+                rows.append([labels[name], "On" if enabled else "Off", *values, difference])
+        table(title, ["Benchmark", "Optimization", "C3", "CMOC", "Smaller"], rows, highlights)
+    paragraph("Kernel code excludes compiler helpers. Loaded program includes those helpers and the common harness, so its ranking can differ. Shaded bold values mark the smaller result; failed or missing results are never ranked.")
+    paragraph("Optimization on means C3's default optimizer and CMOC -O2; off disables C3's optimizer and uses CMOC -O0. These settings do not imply identical optimization passes.")
+    statuses = []
+    for name in BENCHMARKS:
+        statuses.append([labels[name]] + [shared.get((name, enabled, compiler), {}).get("status", "NOT RUN")
+                                         for enabled in (True, False) for compiler in ("C3", "CMOC")])
+    table("Shared-suite correctness", ["Benchmark", "C3 on", "CMOC on", "C3 off", "CMOC off"], statuses)
+    paragraph("PASS means all four seeds match independent reference results. The shared sort uses unsigned words and 16-bit arithmetic; it is a distinct workload from the original C89 byte sort.")
+    content.append("<details><summary>Compiler versions, original-suite results, and measurement details</summary>")
+
     for group, title in (("kr16", "Shared kr16: C3 and CMOC runtime correctness"),
                          ("c89", "Original C89: 6809 correctness"), ("host", "Host correctness")):
         rows = []
@@ -71,6 +132,7 @@ def render(reports):
                           row.get("loaded_bytes", "Unavailable") if valid else "Excluded (FAIL)", "Not measured"])
     table("6809 sizes (bytes)", ["Suite", "Compiler", "Flags", "Benchmark", "Kernel code", "Loaded program", "Cycles"], sizes)
     paragraph("Kernel code excludes compiler helper routines. Loaded program includes the harness and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The kr16 harness passes each seed in D and on the stack for the two calling conventions. C3 stack-check calls use a no-op stub; these bounded kernels have a reserved 4 KiB stack and no static storage. These are bare-metal kernel tests, not OS-9 application tests.")
+    content.append("</details>")
     compatibility = [r for r in reports if r.get("kind") == "compile-compatibility"]
     if compatibility:
         content.append("<details><summary>Original C89 compatibility diagnostics</summary>")
@@ -93,9 +155,9 @@ def render(reports):
     content.append('<p><a href="results.json">Raw result data</a> · <a href="matrix.md">Markdown matrix</a></p>')
     document = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
-                '<title>6809 compiler matrix</title><style>body{font:16px system-ui;margin:2rem;max-width:90rem}'
-                'table{border-collapse:collapse}th,td{border:1px solid #bbb;padding:.6rem;text-align:left}'
-                '.scroll{overflow:auto}p{max-width:65rem}</style></head><body>' + "".join(content) + '</body></html>')
+                '<title>6809 compiler matrix</title><style>body{font:16px/1.55 system-ui;margin:2rem auto;padding:0 1.25rem;max-width:72rem;color:#172b3a;background:#f8fafc}h1{line-height:1.15}h2{margin-top:2rem;font-size:1.25rem}'
+                'table{border-collapse:collapse;width:100%;background:white}th,td{border-bottom:1px solid #dbe3eb;padding:.65rem .8rem;text-align:left;white-space:nowrap}th{background:#eaf0f6;font-size:.9rem}.number{font-variant-numeric:tabular-nums;text-align:right}.smaller{background:#e0f2e9;color:#15583a}.pass{color:#15583a}tbody tr:nth-child(2n){border-bottom:2px solid #bccbd8}'
+                '.scroll{overflow:auto;border:1px solid #dbe3eb;border-radius:8px}p{max-width:65rem}details{margin:1.5rem 0;padding:1rem;background:white;border:1px solid #dbe3eb;border-radius:8px}summary{cursor:pointer;font-weight:600}a{color:#145daa}@media(max-width:600px){body{margin:1rem auto;padding:0 .75rem}th,td{padding:.5rem}} </style></head><body>' + "".join(content) + '</body></html>')
     return "\n".join(markdown), document
 
 
