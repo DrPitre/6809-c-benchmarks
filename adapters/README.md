@@ -25,13 +25,19 @@ on and off. It does not execute modules or collect benchmark sizes. See the
 main README for the observed dialect limitations and status meanings.
 
 `tools/run-kr16.py` executes identical sources from `benchmarks/kr16/` with
-both C3 and CMOC. `kr16-usim.asm` and `kr16-usim.link` provide a common
+C3, CMOC, and LLVM-MC6809. `kr16-usim.asm` and `kr16-usim.link` provide a common
 bare-metal harness, changing only the imported kernel symbol for the compiler
 ABI. C3 objects are translated by its upstream `c3-as`; helper routines come
-from its `libc3lw` archive. CMOC uses its own helper archives. Both are run by
+from its `libc3lw` archive. CMOC uses its own helper archives. All are run by
 the same pinned USIM executable. The source hash is part of every result.
 
 This harness deliberately supports kernels without static storage, OS calls,
 or floating point. Do not use it as a general OS-9 loader. `_stkcheck` is a
 no-op stub for the bounded stack usage of these kernels. The full C3 OS-9
 runtime is not part of these results.
+
+LLVM uses `kr16-llvm.ld` with ELF objects and compiler-runtime helpers from
+release 1.0. The harness is translated from the common assembly source to
+LLVM directive syntax; the `LLVM_ABI` branch transfers the seed/result via X.
+Its 24-byte direct-page register area follows the release's picolibc linker
+layout. No operating-system startup or library runner is linked.

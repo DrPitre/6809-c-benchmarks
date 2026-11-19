@@ -1,12 +1,17 @@
 ; Minimal bare-metal harness for kernels with no static storage.
 ; C3 passes the first unsigned argument in D; CMOC passes it on the stack.
-; Both return an unsigned 16-bit value in D. Output is seed/result in hex.
+; C3/CMOC return in D; LLVM takes its first argument and returns in X.
+; Output is seed/result in hex.
         section start
         export start
+        ifdef LLVM_ABI
+        import bench_run
+        else
         ifdef CMOC_ABI
         import _bench_run
         else
         import bench_ru
+        endc
         endc
         export _stkcheck
 start
@@ -30,10 +35,16 @@ sample
         lda #32
         sta $ff00
         ldd ,s
+        ifdef LLVM_ABI
+        tfr d,x
+        lbsr bench_run
+        tfr x,d
+        else
         ifdef CMOC_ABI
         lbsr _bench_run
         else
         lbsr bench_ru
+        endc
         endc
         leas 2,s
         lbsr hexword

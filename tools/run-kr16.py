@@ -19,7 +19,7 @@ spec.loader.exec_module(cmoc_adapter)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--compiler', choices=('c3', 'cmoc'), required=True)
+    parser.add_argument('--compiler', choices=('c3', 'cmoc', 'llvm'), required=True)
     parser.add_argument('--optimization', choices=('0', '2'), required=True)
     parser.add_argument('--json', type=Path, required=True)
     args = parser.parse_args()
@@ -30,7 +30,7 @@ def main():
     env = os.environ.copy()
     env['C3BASE'] = str(c3base)
     env['C3LW_HOME'] = str(c3base / 'lwbackend')
-    env['PATH'] = os.pathsep.join(str(c3base / 'build/unix' / stage)
+    env['PATH'] = str(ROOT / 'build/llvm/bin') + os.pathsep + os.pathsep.join(str(c3base / 'build/unix' / stage)
                                  for stage in ('exec', 'prep', 'comp', 'optx')) + os.pathsep + str(c3base / 'lwbackend') + os.pathsep + str(toolchain / 'bin') + os.pathsep + env['PATH']
     report = {'compiler': args.compiler.upper(), 'suite': 'kr16',
               'target': '6809 / USIM bare-metal', 'kind': 'runtime',
@@ -57,15 +57,49 @@ def main():
             report['toolchain_revision'] = revision
             report['version'] = 'C3 ' + revision[:12]
             libraries = ['-L' + str(c3base / 'lwbackend'), '-lc3lw']
+        elif args.compiler == 'llvm':
+            report['version'] = run(['mc6809-clang', '--version']).splitlines()[0]
+            if 'llvm-mc6809 1.0 b9af0417885deb8e878ba50e59f90bb8037577f7' not in report['version']:
+                raise ValueError('Unexpected LLVM release version')
+            report['release'] = 'RELEASE_1.0'
+            report['release_url'] = 'https://github.com/markrvmurray/llvm-mc6809/releases/tag/RELEASE_1.0'
+            report['abi_scratch_bytes'] = 24
+            libraries = ['-L' + str(ROOT / 'build/llvm/lib/clang/24/lib/mc6809'), '-lclang_rt.builtins']
         else:
             report['version'] = run(['cmoc', '--version']).strip()
             libraries = ['-L' + str(toolchain / 'share/cmoc/lib'), '-lcmoc-std-usim', '-lcmoc-crt-usim']
-        report['assembler_version'] = run(['lwasm', '--version']).strip()
-        report['linker_version'] = run(['lwlink', '--version']).strip()
-        harness = ['lwasm', '--format=obj', '-o', 'harness.o']
-        if args.compiler == 'cmoc':
-            harness.append('-DCMOC_ABI')
-        run([*harness, str(ROOT / 'adapters/kr16-usim.asm')])
+        if args.compiler == 'llvm':
+            report['assembler_version'] = 'LLVM integrated assembler (same release as clang)'
+            report['linker_version'] = run(['mc6809-ld', '--version']).strip()
+            # Translate only assembler directives/label spelling, preserving the
+            # common harness instructions and compiler-specific ABI branches.
+            lines = ['.set LLVM_ABI, 1']
+            for line in (ROOT / 'adapters/kr16-usim.asm').read_text().splitlines():
+                words = line.split()
+                if not words or line.lstrip().startswith(';'):
+                    lines.append(line)
+                    continue
+                op = words[0]
+                if op == 'section':
+                    line = '        .section .start,"ax"'
+                elif op == 'endsection':
+                    continue
+                elif op in ('export', 'import', 'ifdef'):
+                    line = '        ' + {'export': '.globl', 'import': '.extern', 'ifdef': '.ifdef'}[op] + ' ' + words[1]
+                elif op in ('else', 'endc'):
+                    line = '        ' + {'else': '.else', 'endc': '.endif'}[op]
+                elif not line.startswith(' '):
+                    line += ':'
+                lines.append(line.replace('$', '0x'))
+            (build / 'harness.s').write_text('\n'.join(lines) + '\n')
+            run(['mc6809-clang', '-mcpu=mc6809', '-fno-pie', '-c', 'harness.s', '-o', 'harness.o'])
+        else:
+            report['assembler_version'] = run(['lwasm', '--version']).strip()
+            report['linker_version'] = run(['lwlink', '--version']).strip()
+            harness = ['lwasm', '--format=obj', '-o', 'harness.o']
+            if args.compiler == 'cmoc':
+                harness.append('-DCMOC_ABI')
+            run([*harness, str(ROOT / 'adapters/kr16-usim.asm')])
         for reference in (crc16, insertion_sort, mix16):
             name = reference.__name__
             row = {'benchmark': name, 'status': 'FAIL'}
@@ -81,20 +115,35 @@ def main():
                         run(['c3optx', assembly, name + '.opt.a'])
                         assembly = name + '.opt.a'
                     run(['c3-as', assembly, '-o=' + name + '.o'])
+                elif args.compiler == 'llvm':
+                    run(['mc6809-clang', '-mcpu=mc6809', '-std=c89', '-fno-pie', '-fno-lto',
+                         '-O' + args.optimization, '-save-temps=obj', '-c', '-o', name + '.o', name + '.c'])
                 else:
                     run(['cmoc', '--usim', '-O' + args.optimization, '-i', '-c', '-o', name + '.o', name + '.c'])
-                run(['lwlink', '--format=srec', '--script=' + str(ROOT / 'adapters/kr16-usim.link'),
-                     '--map=' + name + '.map', '-o', name + '.srec', 'harness.o', name + '.o', *libraries])
+                if args.compiler == 'llvm':
+                    run(['mc6809-ld', '-T', str(ROOT / 'adapters/kr16-llvm.ld'),
+                         '-Map=' + name + '.map', '-o', name + '.elf', 'harness.o', name + '.o', *libraries])
+                    run(['mc6809-objcopy', '-O', 'srec', name + '.elf', name + '.srec'])
+                else:
+                    run(['lwlink', '--format=srec', '--script=' + str(ROOT / 'adapters/kr16-usim.link'),
+                         '--map=' + name + '.map', '-o', name + '.srec', 'harness.o', name + '.o', *libraries])
                 output = run(['usim', name + '.srec'])
                 actual = [tuple(int(word, 16) for word in line.split()) for line in output.splitlines()]
                 expected = [(seed, reference(seed)) for seed in SEEDS]
                 row.update(status='PASS' if actual == expected else 'FAIL', output=output, expected=expected,
                            loaded_bytes=cmoc_adapter.loaded_bytes(build / (name + '.srec')))
-                maptext = (build / (name + '.map')).read_text()
-                sections = re.findall(r'^Section: code \(' + re.escape(name) + r'\.o\) load at [0-9A-Fa-f]+, length ([0-9A-Fa-f]+)$', maptext, re.M)
-                if len(sections) != 1:
-                    raise ValueError('Expected one kernel code section')
-                row['kernel_code_bytes'] = int(sections[0], 16)
+                if args.compiler == 'llvm':
+                    sizes = run(['mc6809-size', '-A', name + '.o'])
+                    sections = re.findall(r'^\.text(?:\.\S+)?\s+(\d+)\s+\d+\s*$', sizes, re.M)
+                    if not sections:
+                        raise ValueError('No LLVM kernel text section')
+                    row['kernel_code_bytes'] = sum(map(int, sections))
+                else:
+                    maptext = (build / (name + '.map')).read_text()
+                    sections = re.findall(r'^Section: code \(' + re.escape(name) + r'\.o\) load at [0-9A-Fa-f]+, length ([0-9A-Fa-f]+)$', maptext, re.M)
+                    if len(sections) != 1:
+                        raise ValueError('Expected one kernel code section')
+                    row['kernel_code_bytes'] = int(sections[0], 16)
             except (OSError, ValueError, subprocess.SubprocessError) as error:
                 row.update(status='FAIL', error=str(error))
             report['rows'].append(row)

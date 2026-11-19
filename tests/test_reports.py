@@ -59,6 +59,21 @@ class ReportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_shared_sources(reports)
 
+    def test_three_compiler_gap_uses_next_smallest_and_requires_valid_results(self):
+        reports = []
+        for compiler, size in (("C3", 467), ("CMOC", 374), ("LLVM", 430)):
+            reports.append({"compiler": compiler, "suite": "kr16", "kind": "runtime",
+                            "target": "6809 / USIM bare-metal", "revision": "abc",
+                            "flags": "optimizer on" if compiler == "C3" else "-O2",
+                            "rows": [{"benchmark": "crc16", "status": "PASS",
+                                      "source_sha256": "same", "loaded_bytes": size,
+                                      "kernel_code_bytes": size}]})
+        markdown, _ = render(reports)
+        self.assertIn("| CRC16 | On | 467 | 374 | 430 | CMOC by 56 B |", markdown)
+        reports[-1]["rows"][0]["status"] = "FAIL"
+        markdown, _ = render(reports)
+        self.assertIn("| CRC16 | On | 467 | 374 | Excluded (FAIL) | — |", markdown)
+
 
 if __name__ == '__main__':
     unittest.main()

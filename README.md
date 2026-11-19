@@ -8,7 +8,7 @@ extensions belong in separately labeled comparisons.
 ## Current status
 
 The shared **kr16** suite runs identical K&R-compatible sources under both
-C3 (C-Cubed) and CMOC on a bare-metal 6809 simulator. Both compilers are checked
+C3 (C-Cubed), CMOC, and LLVM-MC6809 1.0 on a bare-metal 6809 simulator. All three compilers are checked
 with optimization disabled and enabled. All three kernels must match independent
 reference results for four seeds before their sizes enter the comparison.
 
@@ -46,7 +46,7 @@ runs using host GCC/Clang and 6809 CMOC, each at `-O0` and `-O2`. CMOC 0.1.99
 and LWTOOLS 4.24 are built from SHA-256-verified release archives. USIM is
 built from the CMOC release. The two CMOC and two C3 jobs each record shared kr16 results as well as
 the original-suite results. Together with four host reports, this produces
-twelve reports. Host jobs also verify the kr16 algorithms.
+fourteen reports, including LLVM at `-O0` and `-O2`. Host jobs also verify the kr16 algorithms.
 
 ## Comparison rules
 
@@ -180,9 +180,48 @@ uses 32-bit arithmetic. Checksum expectations are the same, but size results
 must only be compared within the same suite.
 
 The shared assembly harness supplies each seed in D and on the stack to cover
-C3 and CMOC calling conventions, then prints the returned 16-bit checksum.
+C3 and CMOC calling conventions; the LLVM branch moves the argument and
+return value through X, then prints the returned 16-bit checksum.
 It loads at $2800 with stack top $FE00 and a reserved 4 KiB stack region; these
 bounded kernels use no static storage. C3's `_stkcheck` calls use a no-op stub,
 so this is a bare-metal kernel comparison, not an OS-9 runtime comparison.
 Only referenced compiler helper routines are linked. Kernel size excludes
 those helpers; loaded-program size includes them and the common harness.
+
+## LLVM-MC6809 release 1.0
+
+[Release 1.0](https://github.com/markrvmurray/llvm-mc6809/releases/tag/RELEASE_1.0)
+was the latest stable release when checked on November 19, 2026 (published
+November 16). CI pins that release and its published SHA-256 archive checksums
+rather than silently changing compilers on each run. The version banner records
+LLVM clang 24.0.0 and compiler revision
+`b9af0417885deb8e878ba50e59f90bb8037577f7`.
+
+The installer supports Linux x86-64 (GitHub Actions) and macOS Apple silicon:
+
+```sh
+sh tools/build-cmoc.sh  # supplies the common USIM simulator
+sh tools/install-llvm.sh
+python3 tools/run-kr16.py --compiler llvm --optimization 0 --json build/reports/kr16-llvm-O0.json
+python3 tools/run-kr16.py --compiler llvm --optimization 2 --json build/reports/kr16-llvm-O2.json
+python3 tools/matrix.py build/reports build/site
+```
+
+The unchanged kr16 kernels are compiled with `-mcpu=mc6809 -std=c89 -fno-pie
+-fno-lto` and `-O0` or `-O2`. LLVM's integrated assembler and LLD produce ELF;
+`mc6809-objcopy` converts it to S-records for the same USIM used by C3/CMOC.
+Only referenced LLVM compiler-runtime helpers are linked. No C library,
+6309 instructions, or link-time optimization is used.
+
+The shared harness is translated to LLVM assembler directive/label syntax,
+with a calling-convention branch for X as the first argument and return
+register. This adds four bytes of register-transfer instructions to the
+loaded harness; the kernel code metric excludes it. LLVM reserves 24 bytes
+of direct-page scratch registers, mapped at $0000–$0017; those RAM bytes are
+not counted as loaded code. ELF files, generated assembly, maps, and version
+banners are retained in CI artifacts. Kernel code size sums the kernel
+object's `.text` sections, excluding metadata, helpers, and ELF headers.
+
+`-O2` is a general optimization setting, not a size-minimizing setting. LLVM
+unrolls the CRC loop at `-O2`, so its code can be larger than at `-O0`.
+The matrix reports actual sizes without interpreting size as execution speed.

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 BENCHMARKS = ("crc16", "insertion_sort", "mix16")
+COMPILERS = ("C3", "CMOC", "LLVM")
 
 
 def validate_shared_sources(reports):
@@ -57,13 +58,13 @@ def render(reports):
         content.append('<div class="scroll"><table><thead>' + tr(headers, "th") +
                        "</thead><tbody>" + "".join(tr(r, "td", i) for i, r in enumerate(rows)) + "</tbody></table></div>")
 
-    paragraph("C3 and CMOC, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes; lower is smaller. Timing is not measured.")
+    paragraph("C3, CMOC, and LLVM-MC6809, side by side. Identical kr16 sources run on the same 6809 simulator. Sizes are in bytes; lower is smaller. Timing is not measured.")
     shared = {}
     for report in reports:
         if report.get("suite") != "kr16":
             continue
         compiler = report["compiler"].upper()
-        if compiler not in ("C3", "CMOC"):
+        if compiler not in COMPILERS:
             continue
         enabled = report["flags"] in ("optimizer on", "-O2")
         for row in report["rows"]:
@@ -79,7 +80,7 @@ def render(reports):
         for name in BENCHMARKS:
             for enabled in (True, False):
                 values = []
-                for compiler in ("C3", "CMOC"):
+                for compiler in COMPILERS:
                     result = shared.get((name, enabled, compiler))
                     if result is None:
                         values.append("Not run")
@@ -89,25 +90,27 @@ def render(reports):
                         values.append(result.get(metric, "Unavailable"))
                 difference = "—"
                 if all(isinstance(v, int) for v in values):
-                    if values[0] == values[1]:
-                        difference = "Tie"
+                    ordered = sorted(values)
+                    winners = [i for i, value in enumerate(values) if value == ordered[0]]
+                    if len(winners) > 1:
+                        difference = "Tie: " + "/".join(COMPILERS[i] for i in winners)
                     else:
-                        winner = 0 if values[0] < values[1] else 1
-                        highlights.add((len(rows), winner + 2))
-                        difference = ("C3" if winner == 0 else "CMOC") + " by " + str(abs(values[0] - values[1])) + " B"
+                        difference = COMPILERS[winners[0]] + " by " + str(ordered[1] - ordered[0]) + " B"
+                    if len(winners) != len(values):
+                        highlights.update((len(rows), i + 2) for i in winners)
                 rows.append([labels[name], "On" if enabled else "Off", *values, difference])
-        table(title, ["Benchmark", "Optimization", "C3", "CMOC", "Smaller"], rows, highlights)
-    paragraph("Kernel code excludes compiler helpers. Loaded program includes those helpers and the common harness, so its ranking can differ. Shaded bold values mark the smaller result; failed or missing results are never ranked.")
-    paragraph("Optimization on means C3's default optimizer and CMOC -O2; off disables C3's optimizer and uses CMOC -O0. These settings do not imply identical optimization passes.")
+        table(title, ["Benchmark", "Optimization", *COMPILERS, "Smallest"], rows, highlights)
+    paragraph("Kernel code excludes compiler helpers. Loaded program includes those helpers and the common harness, so its ranking can differ. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
+    paragraph("Optimization on means C3's default optimizer and CMOC/LLVM -O2; off disables C3's optimizer and uses CMOC/LLVM -O0. These settings do not imply identical optimization passes.")
     statuses = []
     for name in BENCHMARKS:
         statuses.append([labels[name]] + [shared.get((name, enabled, compiler), {}).get("status", "NOT RUN")
-                                         for enabled in (True, False) for compiler in ("C3", "CMOC")])
-    table("Shared-suite correctness", ["Benchmark", "C3 on", "CMOC on", "C3 off", "CMOC off"], statuses)
+                                         for enabled in (True, False) for compiler in COMPILERS])
+    table("Shared-suite correctness", ["Benchmark"] + [compiler + " " + setting for setting in ("on", "off") for compiler in COMPILERS], statuses)
     paragraph("PASS means all four seeds match independent reference results. The shared sort uses unsigned words and 16-bit arithmetic; it is a distinct workload from the original C89 byte sort.")
     content.append("<details><summary>Compiler versions, original-suite results, and measurement details</summary>")
 
-    for group, title in (("kr16", "Shared kr16: C3 and CMOC runtime correctness"),
+    for group, title in (("kr16", "Shared kr16: compiler versions and runtime correctness"),
                          ("c89", "Original C89: 6809 correctness"), ("host", "Host correctness")):
         rows = []
         for report in reports:
@@ -120,7 +123,7 @@ def render(reports):
             rows.append([report.get("version", report["compiler"]), report.get("target", "Host"), report["flags"]] +
                         [statuses.get(name, "NOT RUN") for name in BENCHMARKS])
         table(title, ["Compiler", "Target", "Flags", *BENCHMARKS], rows)
-    paragraph("The shared kr16 suite uses identical K&R-compatible source for C3 and CMOC, 16-bit unsigned arithmetic, and one bare-metal harness. Its sort stores values in unsigned words; the original C89 sort uses bytes and 32-bit arithmetic. Compare sizes within a suite, not between suites.")
+    paragraph("The shared kr16 suite uses identical K&R-compatible source for C3, CMOC, and LLVM, 16-bit unsigned arithmetic, and one bare-metal harness. Its sort stores values in unsigned words; the original C89 sort uses bytes and 32-bit arithmetic. Compare sizes within a suite, not between suites.")
     sizes = []
     for report in reports:
         if report.get("kind") == "compile-compatibility" or not report.get("target", "").startswith("6809"):
@@ -131,7 +134,7 @@ def render(reports):
                           row.get("kernel_code_bytes", "Unavailable") if valid else "Excluded (FAIL)",
                           row.get("loaded_bytes", "Unavailable") if valid else "Excluded (FAIL)", "Not measured"])
     table("6809 sizes (bytes)", ["Suite", "Compiler", "Flags", "Benchmark", "Kernel code", "Loaded program", "Cycles"], sizes)
-    paragraph("Kernel code excludes compiler helper routines. Loaded program includes the harness and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The kr16 harness passes each seed in D and on the stack for the two calling conventions. C3 stack-check calls use a no-op stub; these bounded kernels have a reserved 4 KiB stack and no static storage. These are bare-metal kernel tests, not OS-9 application tests.")
+    paragraph("Kernel code excludes compiler helper routines. Loaded program includes the harness and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The kr16 harness passes each seed in D and on the stack for C3/CMOC; LLVM's branch moves the argument and result through X. LLVM reserves 24 bytes of direct-page register scratch RAM, excluded from loaded-program bytes. Its release is pinned to 1.0, with plain 6809 code, -std=c89, -fno-pie, and no LTO. C3 stack-check calls use a no-op stub; these bounded kernels have a reserved 4 KiB stack and no static storage. These are bare-metal kernel tests, not OS-9 application tests.")
     content.append("</details>")
     compatibility = [r for r in reports if r.get("kind") == "compile-compatibility"]
     if compatibility:
