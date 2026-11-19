@@ -394,8 +394,10 @@ current report.
 The current report includes a CMOC 0.1.99 → 0.1.101 table for both optimization
 settings. Negative deltas mean smaller code or fewer instructions. It computes
 deltas only for passing tests with identical source hashes and harness sizes;
-the comparison shows only byte and instruction deltas. Full measurements and
-assembly remain accessible in the current and preserved reports.
+the comparison lists only test/settings with a nonzero byte or instruction delta.
+Each benchmark name links to old/new CMOC assembly side by side with added,
+removed, and changed text highlighted. Unchanged and noncomparable rows are
+omitted. Full measurements remain accessible in the current and preserved reports.
 The main four-compiler rankings use the current release only.
 
 USIM remains pinned to the **0.1.99** archive and the same instruction-counting

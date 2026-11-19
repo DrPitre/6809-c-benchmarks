@@ -1,5 +1,5 @@
 """Render recorded host and 6809 checks without conflating their results."""
-from assembly_report import assembly_url, publish_assembly
+from assembly_report import assembly_url, publish_assembly, changed_cmoc_results, cmoc_diff_url, publish_cmoc_diffs
 import argparse
 import html
 import hashlib
@@ -81,25 +81,10 @@ def overall_sizes(shared, enabled):
 
 
 def cmoc_version_comparison(reports, previous):
-    def configurations(items):
-        return {(row["benchmark"], report["flags"] == "-O2"): (report, row)
-                for report in items if report.get("suite") == "kr16" and report["compiler"].upper() == "CMOC"
-                for row in report["rows"]}
-    old, new = configurations(previous), configurations(reports)
-    rows = []
-    for name in BENCHMARKS:
-        for enabled in (True, False):
-            old_report, before = old.get((name, enabled), ({}, {}))
-            new_report, after = new.get((name, enabled), ({}, {}))
-            comparable = (before.get("status") == after.get("status") == "PASS" and
-                          before.get("source_sha256") and before.get("source_sha256") == after.get("source_sha256") and
-                          type(before.get("harness_bytes")) is int and before.get("harness_bytes") == after.get("harness_bytes"))
-            cells = [LABELS[name], "On" if enabled else "Off"]
-            for metric in ("code_bytes", "instructions"):
-                values = [row.get(metric) for row in (before, after)]
-                cells.append(f"{values[1] - values[0]:+d}" if comparable and all(type(v) is int for v in values) else "Not comparable")
-            rows.append(cells)
-    return rows
+    changes = sorted(changed_cmoc_results(reports, previous), key=lambda item: (BENCHMARKS.index(item[0][0]), not item[0][1]))
+    return [[SourceLink(LABELS[name], cmoc_diff_url(name, enabled)), "On" if enabled else "Off",
+             f"{after['code_bytes'] - before['code_bytes']:+d}", f"{after['instructions'] - before['instructions']:+d}"]
+            for (name, enabled), _, before, _, after in changes]
 
 
 def render(reports, previous_reports=None, historical=False):
@@ -187,7 +172,7 @@ def render(reports, previous_reports=None, historical=False):
         cmoc_versions = [re.search(r"\d+\.\d+\.\d+", r.get("version", "")) for r in reports if r["compiler"].upper() == "CMOC"]
         cmoc_release = next((m.group(0) for m in cmoc_versions if m), "Unavailable")
         content.append('<details id="cmoc-release-comparison" open><summary>CMOC 0.1.99 → ' + cmoc_release + '</summary>')
-        paragraph(f"Old measurements are preserved from the published CMOC 0.1.99 run; the main rankings use CMOC {cmoc_release}. Negative deltas mean fewer bytes or instructions. Deltas require both results to pass with identical source hashes and harness sizes. Code includes runtime helpers and excludes the harness. Full measurements and assembly remain in the current and preserved reports.")
+        paragraph(f"Old measurements are preserved from the published CMOC 0.1.99 run; the main rankings use CMOC {cmoc_release}. Only changed results are shown. Negative deltas mean fewer bytes or instructions. Click a benchmark name to compare old and new assembly with changes highlighted. Deltas require both results to pass with identical source hashes and harness sizes. Code includes runtime helpers and excludes the harness. Full measurements and assembly remain in the current and preserved reports.")
         table("CMOC release comparison", ["Benchmark", "Optimization", "Δ bytes", "Δ instructions"],
               cmoc_version_comparison(reports, previous_reports), grouped=True)
         content.append('</details>')
@@ -384,6 +369,7 @@ def main():
         (archive / 'matrix.md').write_text(old_markdown)
         (archive / 'results.json').write_bytes(snapshot.read_bytes())
         publish_assembly(previous, archive)
+        publish_cmoc_diffs(reports, previous, args.output)
     publish_assembly(reports, args.output)
     (args.output / "matrix.md").write_text(markdown)
     (args.output / "index.html").write_text(document)

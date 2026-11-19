@@ -3,9 +3,11 @@ import json
 from pathlib import Path
 import sys
 import unittest
+import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from matrix import cmoc_version_comparison, render
+from assembly_report import publish_cmoc_diffs, cmoc_diff_url
 
 
 class HistoryTests(unittest.TestCase):
@@ -30,8 +32,23 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(len(cells), 4)
         self.assertEqual(cells[2], '-10')
         self.assertEqual(cells[3], '-50')
+        self.assertEqual(cmoc_version_comparison([old], [old]), [])
         for changes in ({'source_sha256': 'different'}, {'status': 'FAIL'}, {'harness_bytes': 113}):
             new['rows'] = [dict(old['rows'][0], **changes)]
-            cells = cmoc_version_comparison([new], [old])[0]
-            self.assertEqual(cells[2], 'Not comparable')
-            self.assertEqual(cells[3], 'Not comparable')
+            self.assertEqual(cmoc_version_comparison([new], [old]), [])
+
+    def test_changed_row_links_to_highlighted_two_version_assembly(self):
+        before = {'benchmark': 'crc16', 'status': 'PASS', 'source_sha256': 'same',
+                  'harness_bytes': 109, 'code_bytes': 100, 'instructions': 1000,
+                  'assembly': {'crc16.s': 'ldd #1\n; <script>\nrts'}}
+        old = {'compiler': 'CMOC', 'suite': 'kr16', 'flags': '-O2', 'version': 'CMOC 0.1.99', 'rows': [before]}
+        new = dict(old, version='CMOC 0.1.101', rows=[dict(before, code_bytes=102, assembly={'crc16.s': 'ldd #2\n; <script>\nrts'})])
+        cells = cmoc_version_comparison([new], [old])[0]
+        self.assertEqual(cells[0].url, cmoc_diff_url('crc16', True))
+        with tempfile.TemporaryDirectory() as directory:
+            publish_cmoc_diffs([new], [old], directory)
+            page = (Path(directory) / cells[0].url).read_text()
+            self.assertIn('CMOC 0.1.99', page)
+            self.assertIn('CMOC 0.1.101', page)
+            self.assertIn('<span class="diff_chg">', page)
+            self.assertNotIn('<script>', page)

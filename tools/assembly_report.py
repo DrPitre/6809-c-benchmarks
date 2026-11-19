@@ -111,3 +111,61 @@ def publish_assembly(reports, output):
         path = Path(output) / url
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text('\n'.join(parts))
+
+
+def changed_cmoc_results(reports, previous):
+    def configurations(items):
+        return {(row['benchmark'], report['flags'] == '-O2'): (report, row)
+                for report in items if report.get('suite') == 'kr16' and report['compiler'].upper() == 'CMOC'
+                for row in report['rows']}
+    old, new = configurations(previous), configurations(reports)
+    for key, (new_report, after) in new.items():
+        old_report, before = old.get(key, ({}, {}))
+        if not (before.get('status') == after.get('status') == 'PASS' and
+                before.get('source_sha256') and before.get('source_sha256') == after.get('source_sha256') and
+                type(before.get('harness_bytes')) is int and before.get('harness_bytes') == after.get('harness_bytes')):
+            continue
+        if not all(type(row.get(metric)) is int for row in (before, after) for metric in ('code_bytes', 'instructions')):
+            continue
+        if any(before[metric] != after[metric] for metric in ('code_bytes', 'instructions')):
+            yield key, old_report, before, new_report, after
+
+
+def cmoc_diff_url(benchmark, enabled):
+    digest = hashlib.sha256(json.dumps([benchmark, enabled]).encode()).hexdigest()[:16]
+    return 'cmoc-diffs/' + digest + '.html'
+
+
+def publish_cmoc_diffs(reports, previous, output):
+    import difflib
+    for (benchmark, enabled), old_report, before, new_report, after in changed_cmoc_results(reports, previous):
+        title = benchmark + ' — CMOC release comparison — optimization ' + ('on' if enabled else 'off')
+        parts = ['<!doctype html><html lang="en"><meta charset="utf-8">',
+                 '<meta name="viewport" content="width=device-width, initial-scale=1">',
+                 '<title>' + html.escape(title) + '</title>',
+                 '<style>body{font:15px/1.5 system-ui;margin:1.5rem;color:#172b3a}a{color:#145daa}.scroll{overflow:auto}table.diff{font:12px/1.5 ui-monospace,monospace;border-collapse:collapse;width:100%}table.diff td{padding:0 .3rem;vertical-align:top}.diff_header{background:#eaf0f6}.diff_next{background:#f1f5f9}.diff_add{background:#dcfce7;color:#14532d}.diff_sub{background:#fee2e2;color:#991b1b}.diff_chg{background:#fef3c7;color:#713f12}.metadata{display:grid;grid-template-columns:1fr 1fr;gap:1rem}.metadata article{background:#f1f5f9;padding:1rem;overflow-wrap:anywhere}pre{overflow:auto;max-height:30rem}h1{font-size:1.5rem}</style>',
+                 '<a href="../index.html#cmoc-release-comparison">← Back to changed results</a>',
+                 '<h1>' + html.escape(title) + '</h1>',
+                 '<p>Old assembly on the left; new assembly on the right. <span class="diff_sub">Removed</span>, <span class="diff_add">added</span>, and <span class="diff_chg">changed</span> text is highlighted. Line numbers refer to the generated assembly.</p>',
+                 '<div class="metadata">']
+        for report, row in ((old_report, before), (new_report, after)):
+            parts.append('<article><strong>' + html.escape(report.get('version', 'CMOC')) + '</strong><p>Code including helpers: ' + str(row['code_bytes']) + ' B<br>Instructions: ' + str(row['instructions']) + '</p><small>Source revision: ' + html.escape(report.get('revision', 'Unavailable')) + '</small></article>')
+        parts.append('</div>')
+        stems = sorted({filename.split('.')[0] for row in (before, after) for filename in row.get('assembly', {})}, key=lambda stem: (stem != benchmark, stem))
+        for stem in stems:
+            texts = []
+            for row in (before, after):
+                texts.append('\n'.join(text for filename, text in row.get('assembly', {}).items() if filename.split('.')[0] == stem))
+            parts.append('<h2>' + html.escape(stem + '.c') + '</h2><div class="scroll">')
+            parts.append(difflib.HtmlDiff(tabsize=4).make_table(texts[0].splitlines(), texts[1].splitlines(),
+                         fromdesc=html.escape(old_report.get('version', 'Old CMOC')), todesc=html.escape(new_report.get('version', 'New CMOC'))))
+            parts.append('</div>')
+        if not stems:
+            parts.append('<p>Assembly is unavailable for this comparison.</p>')
+        parts.append('<p>Generated source assembly excludes library-helper implementations. Code-size totals include linked helpers; consult the maps for their contributions.</p><div class="metadata">')
+        for label, row in (('Old linker map', before), ('New linker map', after)):
+            parts.append('<details><summary>' + label + '</summary><pre>' + html.escape(row.get('linker_map', 'Unavailable')) + '</pre></details>')
+        parts.append('</div></html>')
+        path = Path(output) / cmoc_diff_url(benchmark, enabled)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('\n'.join(parts))
