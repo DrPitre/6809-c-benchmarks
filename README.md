@@ -121,7 +121,9 @@ local release archive. LWTOOLS is downloaded over HTTPS.
 ## C3 (C-Cubed) compatibility
 
 C3 comes from [nitros9-languages](https://github.com/nitros9project/nitros9-languages/tree/e6e1a014c092fafc5e1378195ad33659b4e54676/c3),
-pinned by `tools/c3-revision.txt`. Both its default optimizer and `-o`
+pinned by `tools/c3-revision.txt`. Host builds enable glibc default API
+declarations with `CPPFLAGS=-D_DEFAULT_SOURCE` while preserving upstream
+C89 compiler flags. Both its default optimizer and `-o`
 (optimizer disabled) are tested. This is the Microware-derived 6809 compiler,
 not the unrelated C3 programming language.
 
