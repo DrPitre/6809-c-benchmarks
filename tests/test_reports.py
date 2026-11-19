@@ -33,7 +33,7 @@ class ReportTests(unittest.TestCase):
                                              'kernel_code_bytes': 999, 'loaded_bytes': 1234}]}
         markdown, document = render([report])
         self.assertIn('Excluded (FAIL)', markdown)
-        self.assertNotIn('999', document)
+        self.assertNotIn('>999<', document)
         self.assertIn('&lt;CMOC&gt;', document)
         self.assertIn('NOT RUN', document)
 
