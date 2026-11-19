@@ -6,7 +6,7 @@ import unittest
 
 TOOLS = Path(__file__).resolve().parents[1] / 'tools'
 sys.path.insert(0, str(TOOLS))
-from matrix import render, validate_shared_sources, source_link
+from matrix import render, validate_shared_sources, source_link, overall_sizes
 spec = importlib.util.spec_from_file_location('run_cmoc', TOOLS / 'run-cmoc.py')
 cmoc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cmoc)
@@ -81,6 +81,22 @@ class ReportTests(unittest.TestCase):
         markdown, document = render(reports)
         self.assertNotIn('class="rank rank-', document)
         self.assertIn("| On | 467 | 374 | 430 | Excluded (FAIL) | — |", markdown)
+
+    def test_overall_ranking_equal_weights_and_common_passing_tests(self):
+        shared = {}
+        for name, sizes in (("crc16", (10, 20, 10, 40)), ("mix16", (1000, 1000, 1000, 2000))):
+            for compiler, size in zip(("C3", "CMOC", "LLVM", "VBCC"), sizes):
+                shared[name, True, compiler] = {"status": "PASS", "kernel_code_bytes": size}
+        rows, included = overall_sizes(shared, True)
+        self.assertEqual(len(included), 2)
+        self.assertEqual([(r[0], r[1], r[2]) for r in rows],
+                         [("1st", "C3", "100.00"), ("1st", "LLVM", "100.00"),
+                          ("3rd", "CMOC", "141.42"), ("4th", "VBCC", "282.84")])
+        shared["crc16", True, "VBCC"]["status"] = "FAIL"
+        rows, included = overall_sizes(shared, True)
+        self.assertEqual(included, ["mix16"])
+        self.assertEqual([r[2] for r in rows], ["100.00", "100.00", "100.00", "200.00"])
+        self.assertEqual(overall_sizes(shared, False), ([], []))
 
     def test_source_links_pin_report_revision(self):
         revision = 'a' * 40

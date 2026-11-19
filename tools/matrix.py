@@ -2,6 +2,7 @@
 import argparse
 import html
 import json
+import math
 import re
 from dataclasses import dataclass
 from urllib.parse import quote
@@ -40,6 +41,41 @@ def validate_shared_sources(reports):
             if row["benchmark"] in seen and seen[row["benchmark"]] != digest:
                 raise ValueError("kr16 compilers did not receive identical source")
             seen[row["benchmark"]] = digest
+
+
+def overall_sizes(shared, enabled):
+    """Equal-weight geometric mean, restricted to the common passing workload."""
+    eligible = []
+    for name in BENCHMARKS:
+        results = [shared.get((name, enabled, compiler), {}) for compiler in COMPILERS]
+        if all(row.get("status") == "PASS" and
+               type(row.get("kernel_code_bytes")) is int and row["kernel_code_bytes"] > 0
+               for row in results):
+            eligible.append(name)
+    if not eligible:
+        return [], eligible
+    scores = {}
+    totals = {}
+    for compiler in COMPILERS:
+        ratios = []
+        totals[compiler] = 0
+        for name in eligible:
+            size = shared[name, enabled, compiler]["kernel_code_bytes"]
+            best = min(shared[name, enabled, other]["kernel_code_bytes"] for other in COMPILERS)
+            ratios.append(math.log(size / best))
+            totals[compiler] += size
+        scores[compiler] = math.exp(sum(ratios) / len(ratios))
+    best_score = min(scores.values())
+    # Rank at displayed precision so visually identical scores share a place.
+    indexes = {compiler: round(score / best_score * 100, 2) for compiler, score in scores.items()}
+    ordered = sorted(indexes.values())
+    rows = []
+    for compiler in sorted(COMPILERS, key=lambda c: (indexes[c], c)):
+        rank = ordered.index(indexes[compiler]) + 1
+        passes = sum(shared.get((name, enabled, compiler), {}).get("status") == "PASS" for name in BENCHMARKS)
+        rows.append([("1st", "2nd", "3rd", "4th")[rank - 1], compiler,
+                     f"{indexes[compiler]:.2f}", totals[compiler], f"{passes}/{len(BENCHMARKS)}"])
+    return rows, eligible
 
 
 def render(reports):
@@ -126,6 +162,19 @@ def render(reports):
             if key in shared:
                 raise ValueError("Duplicate shared compiler configuration")
             shared[key] = row
+
+    content.append('<section class="versions">')
+    paragraph("Overall compiler ranking by benchmark code size. Lower is better; the leading compiler scores 100. Each test has equal weight through the geometric mean of relative sizes. Only tests with valid sizes and passing results from all four compilers enter the ranking. This measures this suite, not all possible C programs; runtime helpers and the harness are excluded.")
+    for enabled in (True, False):
+        ranking, eligible = overall_sizes(shared, enabled)
+        table("Overall code-size ranking — optimization " + ("on" if enabled else "off"),
+              ["Place", "Compiler", "Relative size index", "Total benchmark bytes", "Suite passes"], ranking,
+              highlights={(i, 2) for i, row in enumerate(ranking) if row[0] == "1st"})
+        excluded = [LABELS[name] for name in BENCHMARKS if name not in eligible]
+        paragraph(str(len(eligible)) + "/" + str(len(BENCHMARKS)) + " tests included. " +
+                  ("Excluded from every compiler's score: " + ", ".join(excluded) + "." if excluded else "All tests included.") +
+                  " Total bytes use the same included tests; suite passes cover the entire suite. Ties share a place at two-decimal precision.")
+    content.append('</section>')
 
     shared_revision = next((r["revision"] for r in reports if r.get("suite") == "kr16"), "local")
     labels = {name: source_link(LABELS[name], "benchmarks/kr16/" + name + ".c", shared_revision) for name in BENCHMARKS}

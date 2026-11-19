@@ -309,3 +309,17 @@ The optimized build currently fails `signed16`: seed `0` returns `$91B2`
 instead of `$ED62`. All four seeds disagree. The unoptimized build passes;
 the report excludes the failing optimized result from size rankings. The
 cause has not yet been isolated to compiler code generation or a runtime helper.
+
+
+### Overall code-size ranking
+
+The report ranks compilers separately with optimization on and off. It uses
+only tests where all four compilers pass and report a positive benchmark-code
+size. For each included test, each compiler's size is divided by that test's
+smallest size. The geometric mean of those ratios gives every test equal
+weight; scores are then scaled so the leading compiler has an index of 100.
+An index of 120 means a geometric-mean size ratio 20% above the leader.
+Ties share a place at two-decimal precision. Total bytes and full-suite pass
+counts appear alongside the score; exclusions are listed for each setting.
+This ranking excludes runtime helpers and the harness and describes this
+benchmark suite, not general compiler correctness or all C workloads.
