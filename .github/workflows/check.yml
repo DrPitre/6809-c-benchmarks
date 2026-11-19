@@ -1,0 +1,73 @@
+name: Benchmark matrix
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        optimization: ["-O0", "-O2"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build kernels
+        run: make all CC=${{ matrix.compiler }} CFLAGS="${{ matrix.optimization }} -std=c89 -pedantic -Wall -Wextra -Werror"
+      - name: Record correctness
+        if: always()
+        env:
+          BENCH_CC: ${{ matrix.compiler }}
+          BENCH_FLAGS: ${{ matrix.optimization }} -std=c89 -pedantic -Wall -Wextra -Werror
+        run: python3 tools/check.py --json reports/${{ matrix.compiler }}${{ matrix.optimization }}.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: report-${{ matrix.compiler }}${{ matrix.optimization }}
+          path: reports/*.json
+          if-no-files-found: error
+
+  matrix:
+    needs: check
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: report-*
+          merge-multiple: true
+          path: reports
+      - name: Generate matrix
+        run: |
+          python3 tools/matrix.py reports build/site --expected-reports 4
+          cat build/site/matrix.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-matrix
+          path: build/site
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          path: build/site
+
+  publish:
+    needs: matrix
+    if: always() && needs.matrix.result == 'success' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy matrix
+        id: deployment
+        uses: actions/deploy-pages@v4
