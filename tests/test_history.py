@@ -27,10 +27,11 @@ class HistoryTests(unittest.TestCase):
                          'harness_bytes': 109, 'code_bytes': 100, 'instructions': 1000}]}
         new = dict(old, rows=[dict(old['rows'][0], code_bytes=90, instructions=950)])
         cells = cmoc_version_comparison([new], [old])[0]
-        self.assertEqual(cells[4], '-10')
-        self.assertEqual(cells[7], '-50')
+        self.assertEqual(len(cells), 4)
+        self.assertEqual(cells[2], '-10')
+        self.assertEqual(cells[3], '-50')
         for changes in ({'source_sha256': 'different'}, {'status': 'FAIL'}, {'harness_bytes': 113}):
             new['rows'] = [dict(old['rows'][0], **changes)]
             cells = cmoc_version_comparison([new], [old])[0]
-            self.assertEqual(cells[4], 'Not comparable')
-            self.assertEqual(cells[7], 'Not comparable')
+            self.assertEqual(cells[2], 'Not comparable')
+            self.assertEqual(cells[3], 'Not comparable')

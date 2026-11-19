@@ -96,12 +96,7 @@ def cmoc_version_comparison(reports, previous):
                           type(before.get("harness_bytes")) is int and before.get("harness_bytes") == after.get("harness_bytes"))
             cells = [LABELS[name], "On" if enabled else "Off"]
             for metric in ("code_bytes", "instructions"):
-                values = []
-                for report, row, prefix in ((old_report, before, "history/cmoc-0.1.99/"), (new_report, after, "")):
-                    value = row.get(metric, "Unavailable") if row.get("status") == "PASS" else row.get("status", "Not run")
-                    values.append(value)
-                    url = assembly_url(report, row) if row.get("assembly") else None
-                    cells.append(SourceLink(str(value), prefix + url) if metric == "code_bytes" and isinstance(value, int) and url else value)
+                values = [row.get(metric) for row in (before, after)]
                 cells.append(f"{values[1] - values[0]:+d}" if comparable and all(type(v) is int for v in values) else "Not comparable")
             rows.append(cells)
     return rows
@@ -192,8 +187,8 @@ def render(reports, previous_reports=None, historical=False):
         cmoc_versions = [re.search(r"\d+\.\d+\.\d+", r.get("version", "")) for r in reports if r["compiler"].upper() == "CMOC"]
         cmoc_release = next((m.group(0) for m in cmoc_versions if m), "Unavailable")
         content.append('<details id="cmoc-release-comparison" open><summary>CMOC 0.1.99 → ' + cmoc_release + '</summary>')
-        paragraph(f"Old measurements are preserved from the published CMOC 0.1.99 run; the main rankings use CMOC {cmoc_release}. Negative deltas mean fewer bytes or instructions. Deltas require both results to pass with identical source hashes and harness sizes. Code includes runtime helpers and excludes the harness. Click either size to compare that release's assembly with the other compilers.")
-        table("CMOC release comparison", ["Benchmark", "Optimization", "0.1.99 code (B)", cmoc_release + " code (B)", "Δ bytes", "0.1.99 instructions", cmoc_release + " instructions", "Δ instructions"],
+        paragraph(f"Old measurements are preserved from the published CMOC 0.1.99 run; the main rankings use CMOC {cmoc_release}. Negative deltas mean fewer bytes or instructions. Deltas require both results to pass with identical source hashes and harness sizes. Code includes runtime helpers and excludes the harness. Full measurements and assembly remain in the current and preserved reports.")
+        table("CMOC release comparison", ["Benchmark", "Optimization", "Δ bytes", "Δ instructions"],
               cmoc_version_comparison(reports, previous_reports), grouped=True)
         content.append('</details>')
 
