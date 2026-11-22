@@ -262,6 +262,9 @@ def render(reports, previous_reports=None, historical=False):
     for report in reports:
         if report.get("suite") != "kr16":
             continue
+        if report.get("error"):
+            failures.append(["All benchmarks", report["compiler"], report["flags"],
+                             "Toolchain setup", report["error"]])
         for row in report["rows"]:
             if row["status"] != "PASS":
                 failures.append([labels.get(row["benchmark"], row["benchmark"]), report["compiler"], report["flags"],

@@ -10,6 +10,14 @@ from matrix import overall_sizes, render
 
 
 class GCC6809ReportsTests(unittest.TestCase):
+    def test_setup_failure_is_visible_without_benchmark_rows(self):
+        report = dict(compiler='GCC6809', suite='kr16', flags='-O0', revision='local',
+                      rows=[], error="Executable missing: m6809-unknown-elf-gcc")
+        markdown, document = render([report])
+        self.assertIn('Toolchain setup', markdown)
+        self.assertIn('Executable missing: m6809-unknown-elf-gcc', document)
+        self.assertNotIn('class="rank rank-', document)
+
     def reports(self):
         return [dict(compiler=compiler, suite='kr16', flags='-O2', revision='local',
                      target='6809 / USIM bare-metal',
