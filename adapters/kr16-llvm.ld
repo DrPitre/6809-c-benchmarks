@@ -1,5 +1,5 @@
 /* Bare-metal ELF layout matching the common USIM harness.
- * Direct-page register addresses follow LLVM-MC6809 1.0 picolibc.ld.
+ * Direct-page register addresses follow LLVM-MC6809 picolibc.ld.
  * The kernels have no static variables; the ABI reserves 24 scratch bytes. */
 ENTRY(start)
 SECTIONS {

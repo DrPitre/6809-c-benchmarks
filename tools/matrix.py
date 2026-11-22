@@ -91,7 +91,8 @@ def ordinal(rank):
     return str(rank) + ({1: "st", 2: "nd", 3: "rd"}.get(rank % 10, "th") if rank % 100 not in (11, 12, 13) else "th")
 
 
-def render(reports, previous_reports=None, historical=False):
+def render(reports, previous_reports=None, historical=False,
+           historical_label="CMOC 0.1.99", history_links=()):
     compilers = comparison_compilers(reports)
     standard_compilers = "CMOC/LLVM" + ("/gcc6809" if "GCC6809" in compilers else "")
     validate_shared_sources(reports)
@@ -102,11 +103,17 @@ def render(reports, previous_reports=None, historical=False):
     content.append('<p><a href="' + repository + '">View repository on GitHub</a></p>')
 
     if historical:
-        content.append('<p><strong>Historical snapshot: CMOC 0.1.99.</strong> These results are preserved from the published run before the upgrade. <a href="../../index.html">Return to the current Bake-Off</a>.</p>')
-        markdown.extend(["Historical snapshot: CMOC 0.1.99. [Current Bake-Off](../../index.html)", ""])
+        content.append('<p><strong>Historical snapshot: ' + html.escape(historical_label) + '.</strong> These results are preserved from the published run before the upgrade. <a href="../../index.html">Return to the current Bake-Off</a>.</p>')
+        markdown.extend(["Historical snapshot: " + historical_label + ". [Current Bake-Off](../../index.html)", ""])
     elif previous_reports:
         content.append('<p><a href="history/cmoc-0.1.99/index.html">Preserved results: CMOC 0.1.99</a> · <a href="#cmoc-release-comparison">Compare CMOC releases</a></p>')
         markdown.extend(["[Preserved results: CMOC 0.1.99](history/cmoc-0.1.99/index.html)", ""])
+
+    if not historical:
+        for directory, label in history_links:
+            url = 'history/' + directory + '/index.html'
+            content.append('<p><a href="' + html.escape(url, quote=True) + '">Preserved results: ' + html.escape(label) + '</a></p>')
+            markdown.extend(['[Preserved results: ' + label + '](' + url + ')', ''])
 
     def paragraph(text):
         markdown.extend([text, ""])
@@ -322,7 +329,7 @@ def render(reports, previous_reports=None, historical=False):
                           linked_size(report, row, "loaded_bytes"),
                           row.get("instructions", "Not measured") if valid else "Excluded (FAIL)"])
     table("6809 sizes (bytes)", ["Benchmark", "Compiler", "Flags", "Code + helpers¹", "Complete test program", "Instructions"], sorted(sizes, key=lambda row: str(row[0])), grouped=True)
-    paragraph("Shared-suite code sizes include linked runtime helpers and exclude the measured harness. ¹ Original C89 rows retain their historical function-only measurement and do not enter the shared-suite rankings. Complete test program size includes the test runner and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The shared-suite harness passes each seed in D and on the stack for C3/CMOC; LLVM's branch moves the argument and result through X. LLVM reserves 24 bytes of direct-page register scratch RAM, excluded from complete test program bytes. Its release is pinned to 1.0, with plain 6809 code, -std=c89, -fno-pie, and no LTO. C3 stack-check calls use a no-op stub; these bounded benchmark functions have a reserved 4 KiB stack and no static storage. These are bare-metal benchmark tests, not OS-9 application tests.")
+    paragraph("Shared-suite code sizes include linked runtime helpers and exclude the measured harness. ¹ Original C89 rows retain their historical function-only measurement and do not enter the shared-suite rankings. Complete test program size includes the test runner and linked helpers (plus the C library runner for c89), excluding BSS and S-record text overhead. The shared-suite harness passes each seed in D and on the stack for C3/CMOC; LLVM's branch moves the argument and result through X. LLVM reserves 24 bytes of direct-page register scratch RAM, excluded from complete test program bytes. The exact LLVM release is recorded above, with plain 6809 code, -std=c89, -fno-pie, and no LTO. C3 stack-check calls use a no-op stub; these bounded benchmark functions have a reserved 4 KiB stack and no static storage. These are bare-metal benchmark tests, not OS-9 application tests.")
     content.append("</details>")
     compatibility = [r for r in reports if r.get("kind") == "compile-compatibility"]
     if compatibility:
@@ -361,23 +368,28 @@ def main():
     reports = [json.loads(p.read_text()) for p in sorted(args.input.glob("*.json"))]
     if not reports or (args.expected_reports is not None and len(reports) != args.expected_reports):
         raise SystemExit("Missing reports; refusing to publish an incomplete matrix")
-    snapshot = Path(__file__).resolve().parents[1] / 'history/cmoc-0.1.99/results.json'
-    previous = None
-    if snapshot.exists():
+    history_root = Path(__file__).resolve().parents[1] / 'history'
+    histories = {}
+    for snapshot in sorted(history_root.glob('*/results.json')):
         metadata = json.loads(snapshot.with_name('snapshot.json').read_text())
-        if hashlib.sha256(snapshot.read_bytes()).hexdigest() != metadata['results_sha256']:
-            raise ValueError('Historical snapshot digest mismatch')
-        previous = json.loads(snapshot.read_text())
-    markdown, document = render(reports, previous_reports=previous)
+        data = snapshot.read_bytes()
+        if hashlib.sha256(data).hexdigest() != metadata['results_sha256']:
+            raise ValueError('Historical snapshot digest mismatch: ' + snapshot.parent.name)
+        label = metadata.get('label', 'CMOC 0.1.99' if snapshot.parent.name == 'cmoc-0.1.99' else snapshot.parent.name)
+        histories[snapshot.parent.name] = (json.loads(data), label, data)
+    previous = histories.get('cmoc-0.1.99', (None,))[0]
+    links = [(name, label) for name, (_, label, _) in histories.items() if name != 'cmoc-0.1.99']
+    markdown, document = render(reports, previous_reports=previous, history_links=links)
     args.output.mkdir(parents=True, exist_ok=True)
-    if previous:
-        archive = args.output / 'history/cmoc-0.1.99'
+    for name, (preserved, label, data) in histories.items():
+        archive = args.output / 'history' / name
         archive.mkdir(parents=True, exist_ok=True)
-        old_markdown, old_document = render(previous, historical=True)
+        old_markdown, old_document = render(preserved, historical=True, historical_label=label)
         (archive / 'index.html').write_text(old_document)
         (archive / 'matrix.md').write_text(old_markdown)
-        (archive / 'results.json').write_bytes(snapshot.read_bytes())
-        publish_assembly(previous, archive)
+        (archive / 'results.json').write_bytes(data)
+        publish_assembly(preserved, archive)
+    if previous:
         publish_cmoc_diffs(reports, previous, args.output)
     publish_assembly(reports, args.output)
     (args.output / "matrix.md").write_text(markdown)

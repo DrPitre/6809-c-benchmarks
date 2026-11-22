@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import unittest
 import tempfile
+import subprocess
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from matrix import cmoc_version_comparison, render
@@ -11,6 +12,33 @@ from assembly_report import publish_cmoc_diffs, cmoc_diff_url
 
 
 class HistoryTests(unittest.TestCase):
+    def test_llvm_snapshot_label_and_publication_preserve_both_histories(self):
+        root = Path(__file__).resolve().parents[1]
+        snapshot = root / 'history/llvm-1.0/results.json'
+        metadata = json.loads(snapshot.with_name('snapshot.json').read_text())
+        data = snapshot.read_bytes()
+        self.assertEqual(hashlib.sha256(data).hexdigest(), metadata['results_sha256'])
+        reports = json.loads(data)
+        llvm = [r for r in reports if r.get('suite') == 'kr16' and r['compiler'] == 'LLVM']
+        self.assertEqual(len(llvm), 2)
+        self.assertTrue(all(r['release'] == 'RELEASE_1.0' for r in llvm))
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            inputs = base / 'reports'
+            inputs.mkdir()
+            # The CLI consumes one report object per input file.
+            (inputs / 'all.json').write_text(json.dumps(reports[0]))
+            output = base / 'site'
+            subprocess.run([sys.executable, str(root / 'tools/matrix.py'),
+                            str(inputs), str(output)], check=True, capture_output=True)
+            self.assertIn('history/llvm-1.0/index.html', (output / 'index.html').read_text())
+            for name in ('llvm-1.0', 'cmoc-0.1.99'):
+                self.assertEqual((output / 'history' / name / 'results.json').read_bytes(),
+                                 (root / 'history' / name / 'results.json').read_bytes())
+            archived = (output / 'history/llvm-1.0/index.html').read_text()
+            self.assertIn('Historical snapshot: LLVM-MC6809 1.0', archived)
+            self.assertNotIn('Historical snapshot: CMOC 0.1.99', archived)
+
     def test_preserved_snapshot_is_unchanged_and_uses_old_release(self):
         root = Path(__file__).resolve().parents[1] / 'history/cmoc-0.1.99'
         metadata = json.loads((root / 'snapshot.json').read_text())

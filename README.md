@@ -8,7 +8,7 @@ extensions belong in separately labeled comparisons.
 ## Current status
 
 The shared **kr16** suite runs identical K&R-compatible sources under
-C3 (C-Cubed), CMOC, LLVM-MC6809 1.0, vbcc, and JKBert/gcc6809 on a bare-metal 6809 simulator. All five compilers are checked
+C3 (C-Cubed), CMOC, LLVM-MC6809 1.1.0-rc1, vbcc, and JKBert/gcc6809 on a bare-metal 6809 simulator. All five compilers are checked
 with optimization disabled and enabled. All twelve shared benchmarks must match independent
 reference results for four seeds before their sizes enter the comparison.
 
@@ -188,14 +188,20 @@ so this is a bare-metal benchmark function comparison, not an OS-9 runtime compa
 Only required compiler runtime archive members are linked. Ranked code size includes
 those helpers and excludes the common harness; complete size includes both.
 
-## LLVM-MC6809 release 1.0
+## LLVM-MC6809 1.1.0-rc1
 
-[Release 1.0](https://github.com/markrvmurray/llvm-mc6809/releases/tag/RELEASE_1.0)
-was the latest stable release when checked on November 19, 2026 (published
-November 16). CI pins that release and its published SHA-256 archive checksums
-rather than silently changing compilers on each run. The version banner records
-LLVM clang 24.0.0 and compiler revision
-`b9af0417885deb8e878ba50e59f90bb8037577f7`.
+[Release 1.1.0-rc1](https://github.com/markrvmurray/llvm-mc6809/releases/tag/RELEASE_1.1.0_rc1)
+is a **prerelease**, published November 22, 2026. CI pins this exact candidate
+and its published SHA-256 archive checksums. The version banner records LLVM
+clang 24.0.0 and compiler revision
+`4d1562877f55663dcc04defa5e7fcc002585bd70`.
+
+The preceding five-compiler results are preserved in
+`history/llvm-1.0/results.json`, with checksums, assembly, maps, source hashes,
+and instruction counts. The generated site links a separate historical report
+labeled LLVM-MC6809 1.0. The older CMOC snapshot also remains available. New
+installations replace the entire LLVM bundle and retain any previous directory
+under `build/llvm-previous.*`, avoiding mixed runtime files from different releases.
 
 The installer supports Linux x86-64 (GitHub Actions) and macOS Apple silicon:
 

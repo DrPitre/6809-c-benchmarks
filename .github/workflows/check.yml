@@ -118,7 +118,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y build-essential bison flex curl xz-utils
       - name: Build pinned simulator dependency
         run: sh tools/build-cmoc.sh
-      - name: Install LLVM-MC6809 release 1.0
+      - name: Install pinned LLVM-MC6809 1.1.0-rc1
         run: sh tools/install-llvm.sh
       - name: Run shared kr16 kernels with LLVM
         if: always()

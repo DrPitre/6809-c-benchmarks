@@ -37,7 +37,7 @@ no-op stub for the bounded stack usage of these benchmark functions. The full C3
 runtime is not part of these results.
 
 LLVM uses `kr16-llvm.ld` with ELF objects and compiler-runtime helpers from
-release 1.0. The harness is translated from the common assembly source to
+the pinned LLVM release. The harness is translated from the common assembly source to
 LLVM directive syntax; the `LLVM_ABI` branch transfers the seed/result via X.
 Its 24-byte direct-page register area follows the release's picolibc linker
 layout. No operating-system startup or library runner is linked.
