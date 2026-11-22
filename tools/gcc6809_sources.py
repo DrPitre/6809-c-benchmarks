@@ -9,18 +9,38 @@ import subprocess
 import sys
 
 
-def prepare_archive(item, downloads, destination):
-    archive = downloads / item['file']
-    if not archive.exists():
-        partial = archive.with_suffix(archive.suffix + '.part')
-        subprocess.run(['curl', '--fail', '--location', '--retry', '3',
-                        item['url'], '-o', str(partial)], check=True)
-        partial.replace(archive)
+def archive_digest(archive):
     checksum = hashlib.sha256()
     with archive.open('rb') as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b''):
             checksum.update(block)
-    digest = checksum.hexdigest()
+    return checksum.hexdigest()
+
+
+def download_archive(item, archive):
+    partial = archive.with_suffix(archive.suffix + '.part')
+    failures = []
+    for url in filter(None, (item.get('mirror_url'), item['url'])):
+        try:
+            print('Downloading ' + item['file'] + ' from ' + url, flush=True)
+            subprocess.run(['curl', '--fail', '--location', '--silent', '--show-error',
+                            '--connect-timeout', '20', '--max-time', '3600',
+                            '--retry', '2', '--retry-connrefused',
+                            url, '-o', str(partial)], check=True)
+            if archive_digest(partial) != item['sha256']:
+                raise ValueError('Source checksum mismatch: ' + url)
+            partial.replace(archive)
+            return
+        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+            failures.append(str(error))
+    raise SystemExit('Unable to download verified source ' + item['file'] + ':\n' + '\n'.join(failures))
+
+
+def prepare_archive(item, downloads, destination):
+    archive = downloads / item['file']
+    if not archive.exists():
+        download_archive(item, archive)
+    digest = archive_digest(archive)
     if digest != item['sha256']:
         raise SystemExit('Source checksum mismatch: ' + str(archive))
     tree = destination / item['directory']

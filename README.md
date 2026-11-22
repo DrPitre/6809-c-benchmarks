@@ -317,8 +317,11 @@ cause has not yet been isolated to compiler code generation or a runtime helper.
 separate from the older gcc6809 project. Its GitHub repository contains build
 recipes; the author distributes the patched GCC, binutils, and newlib sources
 on an OpenVMS FTP server. `tools/gcc6809-sources.json` pins the November 10,
-2026 archives and their SHA-256 hashes. The build downloads these sources in
-binary mode and removes archived host build outputs before compiling.
+2026 archives and their SHA-256 hashes. Builds prefer byte-identical HTTPS
+mirrors in this repository’s `gcc6809-sources-20261110` release, with the author’s
+FTP URLs retained as fallback and provenance. Downloads must match the same
+pinned hashes before extraction; archived host build outputs are removed
+before compiling. This avoids FTP connectivity failures on hosted runners.
 
 On Ubuntu, install `build-essential bison flex curl libgmp-dev libmpfr-dev
 libmpc-dev texinfo`, then:

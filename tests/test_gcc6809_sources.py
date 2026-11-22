@@ -2,15 +2,59 @@ import hashlib
 import io
 from pathlib import Path
 import sys
+import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from gcc6809_sources import prepare_archive
+from gcc6809_sources import download_archive, prepare_archive
 
 
 class GCC6809SourceTests(unittest.TestCase):
+    def test_https_mirror_is_verified_before_caching(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / 'source.tar.bz2'
+            payload = b'verified upstream archive bytes'
+            item = dict(file=archive.name, sha256=hashlib.sha256(payload).hexdigest(),
+                        url='ftp://upstream/source', mirror_url='https://mirror/source')
+            def fetch(command, **kwargs):
+                self.assertIn(item['mirror_url'], command)
+                Path(command[-1]).write_bytes(payload)
+            with patch('gcc6809_sources.subprocess.run', side_effect=fetch) as transfer:
+                download_archive(item, archive)
+            self.assertEqual(transfer.call_count, 1)
+            self.assertEqual(archive.read_bytes(), payload)
+
+    def test_unreachable_mirror_falls_back_to_verified_upstream(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / 'source.tar.bz2'
+            payload = b'verified upstream archive bytes'
+            item = dict(file=archive.name, sha256=hashlib.sha256(payload).hexdigest(),
+                        url='ftp://upstream/source', mirror_url='https://mirror/source')
+            def fetch(command, **kwargs):
+                if item['mirror_url'] in command:
+                    raise subprocess.CalledProcessError(28, command)
+                self.assertIn(item['url'], command)
+                Path(command[-1]).write_bytes(payload)
+            with patch('gcc6809_sources.subprocess.run', side_effect=fetch) as transfer:
+                download_archive(item, archive)
+            self.assertEqual(transfer.call_count, 2)
+            self.assertEqual(archive.read_bytes(), payload)
+
+    def test_corrupt_downloads_never_enter_the_archive_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / 'source.tar.bz2'
+            item = dict(file=archive.name, sha256='expected', url='ftp://upstream/source',
+                        mirror_url='https://mirror/source')
+            def fetch(command, **kwargs):
+                Path(command[-1]).write_bytes(b'damaged download')
+            with patch('gcc6809_sources.subprocess.run', side_effect=fetch):
+                with self.assertRaisesRegex(SystemExit, 'Source checksum mismatch'):
+                    download_archive(item, archive)
+            self.assertFalse(archive.exists())
+
     def archive(self, root):
         archive = root / 'source.tar.bz2'
         files = {'source/hello.c': 'int hello;\n',

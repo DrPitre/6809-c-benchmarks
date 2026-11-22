@@ -7,19 +7,22 @@
       "file": "binutils6809-20261110.tar.bz2",
       "directory": "binutils-gdb",
       "url": "ftp://newton.systella.fr/63f09_tools/BINUTILS-20261110-TAR.BZ2;1",
-      "sha256": "ffd473707a6d6c611807706dd582b7a38eb7b811ad38dbe2dc5e2ebf17cf8801"
+      "sha256": "ffd473707a6d6c611807706dd582b7a38eb7b811ad38dbe2dc5e2ebf17cf8801",
+      "mirror_url": "https://github.com/DrPitre/6809-c-benchmarks/releases/download/gcc6809-sources-20261110/binutils6809-20261110.tar.bz2"
     },
     {
       "file": "gcc6809-20261110.tar.bz2",
       "directory": "gcc-16.2.0",
       "url": "ftp://newton.systella.fr/63f09_tools/GCC-16_2_0-20261110-TAR.BZ2;1",
-      "sha256": "6303a6e1b1e80804551177500ebdaba46d38bc6ad2d639a0a829002a18a3c115"
+      "sha256": "6303a6e1b1e80804551177500ebdaba46d38bc6ad2d639a0a829002a18a3c115",
+      "mirror_url": "https://github.com/DrPitre/6809-c-benchmarks/releases/download/gcc6809-sources-20261110/gcc6809-20261110.tar.bz2"
     },
     {
       "file": "newlib6809-20261110.tar.bz2",
       "directory": "newlib-4.6.0",
       "url": "ftp://newton.systella.fr/63f09_tools/NEWLIB-4_6_0-20261110-TAR.BZ2;1",
-      "sha256": "f6f7409be9238f02513c4322cdd9582a23a51dc1e4462353f726f61eed29fa76"
+      "sha256": "f6f7409be9238f02513c4322cdd9582a23a51dc1e4462353f726f61eed29fa76",
+      "mirror_url": "https://github.com/DrPitre/6809-c-benchmarks/releases/download/gcc6809-sources-20261110/newlib6809-20261110.tar.bz2"
     }
   ]
 }
