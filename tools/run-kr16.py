@@ -19,9 +19,40 @@ cmoc_adapter = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cmoc_adapter)
 
 
+def gnu_vasm_harness():
+    """Select undecorated symbols, stack/D arguments, and a D result.
+
+    GCC reads the seed from the stack; vbcc reads D. The common harness
+    supplies both. Translate only directives and label spelling.
+    """
+    lines, active = [], [True]
+    for line in (ROOT / 'adapters/kr16-usim.asm').read_text().splitlines():
+        words = line.split()
+        if not words or line.lstrip().startswith(';'):
+            continue
+        op = words[0]
+        if op == 'ifdef':
+            active.append(active[-1] and words[1] == 'VBCC_ABI')
+        elif op == 'else':
+            active[-1] = active[-2] and not active[-1]
+        elif op == 'endc':
+            active.pop()
+        elif active[-1]:
+            if op == 'section':
+                line = '        .section .start,\"ax\"'
+            elif op == 'endsection':
+                continue
+            elif op in ('export', 'import'):
+                line = '        .global ' + words[1]
+            elif not line.startswith(' '):
+                line += ':'
+            lines.append(line.replace('$', '0x'))
+    return '\n'.join(lines) + '\n'
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--compiler', choices=('c3', 'cmoc', 'llvm', 'vbcc'), required=True)
+    parser.add_argument('--compiler', choices=('c3', 'cmoc', 'llvm', 'vbcc', 'gcc6809'), required=True)
     parser.add_argument('--optimization', choices=('0', '2'), required=True)
     parser.add_argument('--json', type=Path, required=True)
     args = parser.parse_args()
@@ -30,9 +61,10 @@ def main():
     c3base = ROOT / 'build/sources/nitros9-languages/c3'
     toolchain = ROOT / 'build/toolchain'
     env = os.environ.copy()
+    gcc_prefix = Path(env.get('GCC6809_PREFIX', ROOT / 'build/gcc6809')).resolve()
     env['C3BASE'] = str(c3base)
     env['C3LW_HOME'] = str(c3base / 'lwbackend')
-    env['PATH'] = str(ROOT / 'build/vbcc/bin') + os.pathsep + str(ROOT / 'build/llvm/bin') + os.pathsep + os.pathsep.join(str(c3base / 'build/unix' / stage)
+    env['PATH'] = str(gcc_prefix / 'bin') + os.pathsep + str(ROOT / 'build/vbcc/bin') + os.pathsep + str(ROOT / 'build/llvm/bin') + os.pathsep + os.pathsep.join(str(c3base / 'build/unix' / stage)
                                  for stage in ('exec', 'prep', 'comp', 'optx')) + os.pathsep + str(c3base / 'lwbackend') + os.pathsep + str(toolchain / 'bin') + os.pathsep + env['PATH']
     report = {'compiler': args.compiler.upper(), 'suite': 'kr16',
               'target': '6809 / USIM bare-metal', 'kind': 'runtime',
@@ -63,6 +95,14 @@ def main():
             report['toolchain_revision'] = revision
             report['version'] = 'C3 ' + revision[:12]
             libraries = ['-L' + str(c3base / 'lwbackend'), '-lc3lw']
+        elif args.compiler == 'gcc6809':
+            report['version'] = run(['m6809-unknown-elf-gcc', '--version']).splitlines()[0]
+            report['release_url'] = 'https://github.com/JKBert/gcc6809'
+            report['flags_detail'] = '-m6809 -std=gnu89 -fno-pie -fno-lto -O' + args.optimization
+            manifest = gcc_prefix / 'source-manifest.json'
+            if manifest.exists():
+                report['source_manifest'] = json.loads(manifest.read_text())
+            libraries = ['-Wl,--start-group', '-lgcc', '-lc', '-Wl,--end-group']
         elif args.compiler == 'vbcc':
             report['version'] = run(['vbcchc12'], version_probe=True).splitlines()[0]
             report['release'] = '6809 Release 1 Preview (2026-01-25)'
@@ -79,34 +119,16 @@ def main():
         else:
             report['version'] = run(['cmoc', '--version']).strip()
             libraries = ['-L' + str(toolchain / 'share/cmoc/lib'), '-lcmoc-std-usim', '-lcmoc-crt-usim']
-        if args.compiler == 'vbcc':
-            report['assembler_version'] = run(['vasm6809_std'], version_probe=True).splitlines()[0]
-            report['linker_version'] = run(['vlink', '-v'], version_probe=True).splitlines()[0]
-            # Select ABI branches from the same harness, then translate directives.
-            lines, active = [], [True]
-            for line in (ROOT / 'adapters/kr16-usim.asm').read_text().splitlines():
-                words = line.split()
-                if not words or line.lstrip().startswith(';'):
-                    continue
-                op = words[0]
-                if op == 'ifdef':
-                    active.append(active[-1] and words[1] == 'VBCC_ABI')
-                elif op == 'else':
-                    active[-1] = active[-2] and not active[-1]
-                elif op == 'endc':
-                    active.pop()
-                elif active[-1]:
-                    if op == 'section':
-                        line = '        .section .start,\"ax\"'
-                    elif op == 'endsection':
-                        continue
-                    elif op in ('export', 'import'):
-                        line = '        .global ' + words[1]
-                    elif not line.startswith(' '):
-                        line += ':'
-                    lines.append(line.replace('$', '0x'))
-            (build / 'harness.s').write_text('\n'.join(lines) + '\n')
-            run(['vasm6809_std', '-Fvobj', '-o', 'harness.o', 'harness.s'])
+        if args.compiler in ('vbcc', 'gcc6809'):
+            assembler = 'm6809-unknown-elf-as' if args.compiler == 'gcc6809' else 'vasm6809_std'
+            linker = 'm6809-unknown-elf-ld' if args.compiler == 'gcc6809' else 'vlink'
+            report['assembler_version'] = run([assembler, '--version'] if args.compiler == 'gcc6809' else [assembler], version_probe=True).splitlines()[0]
+            report['linker_version'] = run([linker, '--version'] if args.compiler == 'gcc6809' else [linker, '-v'], version_probe=True).splitlines()[0]
+            (build / 'harness.s').write_text(gnu_vasm_harness())
+            if args.compiler == 'gcc6809':
+                run(['m6809-unknown-elf-gcc', '-m6809', '-c', '-o', 'harness.o', 'harness.s'])
+            else:
+                run(['vasm6809_std', '-Fvobj', '-o', 'harness.o', 'harness.s'])
         elif args.compiler == 'llvm':
             report['assembler_version'] = 'LLVM integrated assembler (same release as clang)'
             report['linker_version'] = run(['mc6809-ld', '--version']).strip()
@@ -169,6 +191,9 @@ def main():
                              stem + '.c', '-o=' + stem + '.s'])
                         run(['vasm6809_std', '-nowarn=62', '-opt-branch', '-opt-offset', '-Fvobj',
                              '-o', stem + '.o', stem + '.s'])
+                    elif args.compiler == 'gcc6809':
+                        run(['m6809-unknown-elf-gcc', '-m6809', '-std=gnu89', '-fno-pie', '-fno-lto',
+                             '-O' + args.optimization, '-save-temps=obj', '-c', '-o', stem + '.o', stem + '.c'])
                     elif args.compiler == 'llvm':
                         run(['mc6809-clang', '-mcpu=mc6809', '-std=c89', '-fno-pie', '-fno-lto',
                              '-O' + args.optimization, '-save-temps=obj', '-c', '-o', stem + '.o', stem + '.c'])
@@ -182,6 +207,11 @@ def main():
                     maptext = run(['vlink', '-b', 'srec19', '-T', str(ROOT / 'adapters/kr16-vbcc.ld'),
                                    '-M', '-o', name + '.srec', 'harness.o', *objects, *libraries])
                     (build / (name + '.map')).write_text(maptext)
+                elif args.compiler == 'gcc6809':
+                    run(['m6809-unknown-elf-gcc', '-m6809', '-nostdlib', '-fno-lto',
+                         '-Wl,-T,' + str(ROOT / 'adapters/kr16-gcc6809.ld'),
+                         '-Wl,-Map,' + name + '.map', '-o', name + '.elf', 'harness.o', *objects, *libraries])
+                    run(['m6809-unknown-elf-objcopy', '-O', 'srec', name + '.elf', name + '.srec'])
                 elif args.compiler == 'llvm':
                     run(['mc6809-ld', '-T', str(ROOT / 'adapters/kr16-llvm.ld'),
                          '-Map=' + name + '.map', '-o', name + '.elf', 'harness.o', *objects, *libraries])
@@ -215,11 +245,12 @@ def main():
                             raise ValueError('Expected one vbcc benchmark text section per object')
                         total += int(sections[0][1], 16) - int(sections[0][0], 16)
                     row['kernel_code_bytes'] = total
-                elif args.compiler == 'llvm':
-                    sizes = run(['mc6809-size', '-A', *objects])
+                elif args.compiler in ('llvm', 'gcc6809'):
+                    size_tool = 'm6809-unknown-elf-size' if args.compiler == 'gcc6809' else 'mc6809-size'
+                    sizes = run([size_tool, '-A', *objects])
                     sections = re.findall(r'^\.text(?:\.\S+)?\s+(\d+)\s+\d+\s*$', sizes, re.M)
                     if not sections:
-                        raise ValueError('No LLVM kernel text section')
+                        raise ValueError('No kernel text section')
                     row['kernel_code_bytes'] = sum(map(int, sections))
                 else:
                     maptext = (build / (name + '.map')).read_text()

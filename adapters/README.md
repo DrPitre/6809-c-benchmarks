@@ -47,3 +47,11 @@ functions. The adapter links all test objects and includes their code in the
 benchmark-code metric. C3's `_rpterr` hook terminates the simulator with a
 nonzero result. LLVM can emit C-library calls such as `memmove`; referenced
 picolibc routines are linked and counted in complete-program size.
+
+`gcc6809` uses GNU ELF objects with `kr16-gcc6809.ld` and the common harness's
+undecorated `bench_run` symbol. Its plain 6809 ABI takes arguments on the stack
+and returns 16-bit results in D. GNU objcopy emits S-records; GNU linker-map
+symbols supply the same size and instruction-count boundaries. The adapter
+links referenced libgcc/newlib helpers without startup, rejects uninitialized
+storage, and reserves the same 4 KiB stack. Sources are built by
+`tools/build-gcc6809.sh`; see the main README for source and install locations.

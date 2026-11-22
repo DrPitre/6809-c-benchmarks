@@ -1,6 +1,7 @@
 ; Minimal bare-metal harness for kernels with no static storage.
 ; C3 passes the first unsigned argument in D; CMOC passes it on the stack.
 ; vbcc also passes its first argument and result in D.
+; gcc6809 uses the undecorated-symbol branch, stack argument, and D result.
 ; C3/CMOC return in D; LLVM takes its first argument and returns in X.
 ; Output is seed/result in hex.
         section start

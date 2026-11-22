@@ -7,6 +7,7 @@ def boundary_address(maptext, symbol):
         r'^Symbol: ' + re.escape(symbol) + r' \(harness\.o\) = ([0-9A-Fa-f]+)$',
         r'^\s*([0-9A-Fa-f]+)\s+[0-9A-Fa-f]+\s+0\s+1\s+' + re.escape(symbol) + r'$',
         r'^\s*0x([0-9A-Fa-f]+) ' + re.escape(symbol) + r': global reloc, size 0$',
+        r'^\s*0x([0-9A-Fa-f]+)\s+' + re.escape(symbol) + r'\s*$',
     )
     matches = [m for pattern in patterns for m in re.findall(pattern, maptext, re.M)]
     if len(matches) != 1:

@@ -7,8 +7,8 @@ extensions belong in separately labeled comparisons.
 
 ## Current status
 
-The shared **kr16** suite runs identical K&R-compatible sources under both
-C3 (C-Cubed), CMOC, LLVM-MC6809 1.0, and vbcc on a bare-metal 6809 simulator. All four compilers are checked
+The shared **kr16** suite runs identical K&R-compatible sources under
+C3 (C-Cubed), CMOC, LLVM-MC6809 1.0, vbcc, and JKBert/gcc6809 on a bare-metal 6809 simulator. All five compilers are checked
 with optimization disabled and enabled. All twelve shared benchmarks must match independent
 reference results for four seeds before their sizes enter the comparison.
 
@@ -46,7 +46,7 @@ runs using host GCC/Clang and 6809 CMOC, each at `-O0` and `-O2`. CMOC 0.1.101
 and LWTOOLS 4.24 are built from SHA-256-verified release archives. USIM is
 built from the CMOC release. The two CMOC and two C3 jobs each record shared kr16 results as well as
 the original-suite results. Together with four host reports, this produces
-sixteen reports, including LLVM and vbcc at `-O0` and `-O2`. Host jobs also verify the kr16 algorithms.
+eighteen reports, including LLVM, vbcc, and gcc6809 at `-O0` and `-O2`. Host jobs also verify the kr16 algorithms.
 
 ## Comparison rules
 
@@ -185,7 +185,7 @@ return value through X, then prints the returned 16-bit checksum.
 It loads at $2800 with stack top $FE00 and a reserved 4 KiB stack region; these
 bounded benchmark functions use no static storage. C3's `_stkcheck` calls use a no-op stub,
 so this is a bare-metal benchmark function comparison, not an OS-9 runtime comparison.
-Only referenced compiler helper routines are linked. Ranked code size includes
+Only required compiler runtime archive members are linked. Ranked code size includes
 those helpers and excludes the common harness; complete size includes both.
 
 ## LLVM-MC6809 release 1.0
@@ -230,8 +230,8 @@ The matrix reports actual sizes without interpreting size as execution speed.
 
 ## Expanded shared test coverage
 
-The kr16 suite contains 12 tests, each run with four seeds on all three
-compilers at two optimization settings: **288 target checksum checks**.
+The kr16 suite contains 12 tests, each run with four seeds on all five
+compilers at two optimization settings: **480 target checksum checks**.
 Host GCC/Clang also check the shared sources. The original three C89 tests
 remain a separate suite.
 
@@ -311,10 +311,62 @@ the report excludes the failing optimized result from size rankings. The
 cause has not yet been isolated to compiler code generation or a runtime helper.
 
 
+## JKBert/gcc6809
+
+[JKBert/gcc6809](https://github.com/JKBert/gcc6809) is a new GNU backend,
+separate from the older gcc6809 project. Its GitHub repository contains build
+recipes; the author distributes the patched GCC, binutils, and newlib sources
+on an OpenVMS FTP server. `tools/gcc6809-sources.json` pins the November 10,
+2026 archives and their SHA-256 hashes. The build downloads these sources in
+binary mode and removes archived host build outputs before compiling.
+
+On Ubuntu, install `build-essential bison flex curl libgmp-dev libmpfr-dev
+libmpc-dev texinfo`, then:
+
+```sh
+sh tools/build-gcc6809.sh
+sh tools/build-cmoc.sh  # supplies the common USIM simulator
+python3 tools/run-kr16.py --compiler gcc6809 --optimization 0 --json build/reports/kr16-gcc6809-O0.json
+python3 tools/run-kr16.py --compiler gcc6809 --optimization 2 --json build/reports/kr16-gcc6809-O2.json
+python3 tools/matrix.py build/reports build/site
+```
+
+By default, compiler sources live under `~/Projects/gcc6809/sources`, alongside
+an existing clone of the build-recipe repository. `GCC6809_SOURCE_DIR` overrides
+that location; CI uses `build/sources/gcc6809`. Installed tools and build outputs
+stay under `build/gcc6809` and `build/gcc6809-build`. Set `GCC6809_PREFIX` to use
+another installation. On macOS, install the GMP, MPFR, MPC, and GNU build
+prerequisites first; `GCC6809_HOST_PREFIX` can point to a common prefix containing
+those three libraries. The installer preserves existing source directories
+that it did not create and asks for an empty source destination.
+
+Only the C frontend, plain 6809 binutils, newlib, and libgcc are needed. The
+build disables multilib; no 6309 or 63F09 results enter this comparison. Each
+unchanged kr16 translation unit is compiled separately with `-m6809 -std=gnu89
+-fno-pie -fno-lto` and `-O0` or `-O2`. Arguments are passed on the stack and
+16-bit results return in D. The common harness already supplies that stack
+argument, so no extra ABI instructions are needed. A native Apple silicon
+macOS build of this pinned snapshot passed all 96 shared-suite checksum checks
+across both settings on November 22, 2026.
+
+The GNU linker uses `adapters/kr16-gcc6809.ld` at `$2800`; objcopy converts ELF
+to S-records for the same USIM. Only referenced newlib/libgcc archive members
+are linked, with no library startup. GNU runtime assembly can group several
+functions in one archive member; every loaded byte of that member counts.
+The linker rejects BSS (the common harness
+does not initialize it) and programs overlapping the reserved stack. Size
+accounting includes all loaded helpers and constants and subtracts the exact
+harness range from the GNU linker map. Generated assembly, maps, commands,
+source hashes, compiler versions, and per-seed instruction counts use the
+same report format as the other compilers. CI builds the GNU toolchain once
+and runs both optimization settings; incorrect or unbuildable results remain
+visible and never enter rankings. Reports containing gcc6809 use five columns;
+the preserved four-compiler reports retain their original comparison group.
+
 ### Overall code-size ranking
 
 The report ranks compilers separately with optimization on and off. It uses
-only tests where all four compilers pass and report a positive benchmark-code
+only tests where all participating compilers pass and report a positive benchmark-code
 size. For each included test, each compiler's size is divided by that test's
 smallest size. The geometric mean of those ratios gives every test equal
 weight; scores are then scaled so the leading compiler has an index of 100.
@@ -364,7 +416,7 @@ addressing and taken-branch penalties; host elapsed time is not a substitute.
 ### Assembly linked from size measurements
 
 Click any individual benchmark or complete-program size in the HTML or Markdown
-matrix to compare all four compilers' generated assembly side by side for that
+matrix to compare all participating compilers' generated assembly side by side for that
 test and optimizer setting. Matching source files align across columns, with
 independently scrollable assembly panes and explicit failed-build diagnostics.
 Each page includes all test compilation units (including support functions),
@@ -398,7 +450,7 @@ the comparison lists only test/settings with a nonzero byte or instruction delta
 Each benchmark name links to old/new CMOC assembly side by side with added,
 removed, and changed text highlighted. Unchanged and noncomparable rows are
 omitted. Full measurements remain accessible in the current and preserved reports.
-The main four-compiler rankings use the current release only.
+The main current-compiler rankings use the current release only.
 
 USIM remains pinned to the **0.1.99** archive and the same instruction-counting
 patch for both compiler releases. To reproduce the earlier compiler build:

@@ -1,5 +1,5 @@
 """Render recorded host and 6809 checks without conflating their results."""
-from assembly_report import assembly_url, publish_assembly, changed_cmoc_results, cmoc_diff_url, publish_cmoc_diffs
+from assembly_report import COMPILERS, comparison_compilers, assembly_url, publish_assembly, changed_cmoc_results, cmoc_diff_url, publish_cmoc_diffs
 import argparse
 import html
 import hashlib
@@ -12,7 +12,6 @@ from shared_suite import BENCHMARKS, LABELS, PURPOSES, sources
 from pathlib import Path
 
 C89_BENCHMARKS = ("crc16", "insertion_sort", "mix16")
-COMPILERS = ("C3", "CMOC", "LLVM", "VBCC")
 
 
 @dataclass(frozen=True)
@@ -45,11 +44,12 @@ def validate_shared_sources(reports):
             seen[row["benchmark"]] = digest
 
 
-def overall_sizes(shared, enabled):
+def overall_sizes(shared, enabled, compilers=None):
     """Equal-weight geometric mean, restricted to the common passing workload."""
+    compilers = compilers or COMPILERS
     eligible = []
     for name in BENCHMARKS:
-        results = [shared.get((name, enabled, compiler), {}) for compiler in COMPILERS]
+        results = [shared.get((name, enabled, compiler), {}) for compiler in compilers]
         if all(row.get("status") == "PASS" and
                type(row.get("code_bytes")) is int and row["code_bytes"] > 0
                for row in results):
@@ -58,12 +58,12 @@ def overall_sizes(shared, enabled):
         return [], eligible
     scores = {}
     totals = {}
-    for compiler in COMPILERS:
+    for compiler in compilers:
         ratios = []
         totals[compiler] = 0
         for name in eligible:
             size = shared[name, enabled, compiler]["code_bytes"]
-            best = min(shared[name, enabled, other]["code_bytes"] for other in COMPILERS)
+            best = min(shared[name, enabled, other]["code_bytes"] for other in compilers)
             ratios.append(math.log(size / best))
             totals[compiler] += size
         scores[compiler] = math.exp(sum(ratios) / len(ratios))
@@ -72,10 +72,10 @@ def overall_sizes(shared, enabled):
     indexes = {compiler: round(score / best_score * 100, 2) for compiler, score in scores.items()}
     ordered = sorted(indexes.values())
     rows = []
-    for compiler in sorted(COMPILERS, key=lambda c: (indexes[c], c)):
+    for compiler in sorted(compilers, key=lambda c: (indexes[c], c)):
         rank = ordered.index(indexes[compiler]) + 1
         passes = sum(shared.get((name, enabled, compiler), {}).get("status") == "PASS" for name in BENCHMARKS)
-        rows.append([("1st", "2nd", "3rd", "4th")[rank - 1], compiler,
+        rows.append([ordinal(rank), compiler,
                      f"{indexes[compiler]:.2f}", totals[compiler], f"{passes}/{len(BENCHMARKS)}"])
     return rows, eligible
 
@@ -87,7 +87,13 @@ def cmoc_version_comparison(reports, previous):
             for (name, enabled), _, before, _, after in changes]
 
 
+def ordinal(rank):
+    return str(rank) + ({1: "st", 2: "nd", 3: "rd"}.get(rank % 10, "th") if rank % 100 not in (11, 12, 13) else "th")
+
+
 def render(reports, previous_reports=None, historical=False):
+    compilers = comparison_compilers(reports)
+    standard_compilers = "CMOC/LLVM" + ("/gcc6809" if "GCC6809" in compilers else "")
     validate_shared_sources(reports)
     markdown = ["# The Grand 6809 C Compiler Bake-Off!", ""]
     content = ["<h1>The Grand 6809 C Compiler Bake-Off!</h1>"]
@@ -141,9 +147,9 @@ def render(reports, previous_reports=None, historical=False):
                     value = "<strong>" + value + "</strong>"
                 if ranks and (row_index, column) in ranks:
                     rank = ranks[row_index, column]
-                    ordinal = ("1st", "2nd", "3rd", "4th")[rank - 1]
-                    value += (' <span class="rank rank-' + str(rank) + '" title="' + ordinal +
-                              ' place for this metric in this row">' + ordinal + '</span>')
+                    place = ordinal(rank)
+                    value += (' <span class="rank rank-' + str(rank) + '" title="' + place +
+                              ' place for this metric in this row">' + place + '</span>')
                 if cell == "PASS":
                     classes.append("pass")
                 elif cell in ("FAIL", "COMPILE FAIL", "Excluded (FAIL)"):
@@ -153,10 +159,10 @@ def render(reports, previous_reports=None, historical=False):
         content.append('<div class="scroll"><table><thead>' + tr(headers, "th") +
                        "</thead><tbody>" + "".join(tr(r, "td", i) for i, r in enumerate(rows)) + "</tbody></table></div>")
 
-    paragraph("C3, CMOC, LLVM-MC6809, and vbcc, side by side. Identical Shared 16-bit suite sources run on the same 6809 simulator. Sizes are in bytes; click a size to compare all four assembly outputs side by side. Executed instruction counts cover four seed runs. Lower is better for both metrics; CPU cycles are not measured.")
+    paragraph(", ".join(compilers) + ", side by side. Identical Shared 16-bit suite sources run on the same 6809 simulator. Sizes are in bytes; click a size to compare all participating assembly outputs side by side. Executed instruction counts cover four seed runs. Lower is better for both metrics; CPU cycles are not measured.")
     content.append('<section class="versions">')
     versions = []
-    for compiler in COMPILERS:
+    for compiler in compilers:
         seen = set()
         for report in reports:
             if report.get("suite") != "kr16" or report["compiler"].upper() != compiler:
@@ -183,7 +189,7 @@ def render(reports, previous_reports=None, historical=False):
         if report.get("suite") != "kr16":
             continue
         compiler = report["compiler"].upper()
-        if compiler not in COMPILERS:
+        if compiler not in compilers:
             continue
         enabled = report["flags"] in ("optimizer on", "-O2")
         for row in report["rows"]:
@@ -194,9 +200,9 @@ def render(reports, previous_reports=None, historical=False):
             assembly_links[key] = assembly_url(report, row)
 
     content.append('<section class="versions">')
-    paragraph("Overall compiler ranking by benchmark code size. Lower is better; the leading compiler scores 100. Each test has equal weight through the geometric mean of relative sizes. Only tests with valid sizes and passing results from all four compilers enter the ranking. This measures this suite, not all possible C programs; linked runtime helpers, constants, and initialized data are included; only the test harness and uninitialized storage are excluded.")
+    paragraph("Overall compiler ranking by benchmark code size. Lower is better; the leading compiler scores 100. Each test has equal weight through the geometric mean of relative sizes. Only tests with valid sizes and passing results from all participating compilers enter the ranking. This measures this suite, not all possible C programs; linked runtime helpers, constants, and initialized data are included; only the test harness and uninitialized storage are excluded.")
     for enabled in (True, False):
-        ranking, eligible = overall_sizes(shared, enabled)
+        ranking, eligible = overall_sizes(shared, enabled, compilers)
         table("Overall code-size ranking — optimization " + ("on" if enabled else "off"),
               ["Place", "Compiler", "Relative size index", "Total code + helpers (B)", "Suite passes"], ranking,
               highlights={(i, 2) for i, row in enumerate(ranking) if row[0] == "1st"})
@@ -215,7 +221,7 @@ def render(reports, previous_reports=None, historical=False):
         for name in BENCHMARKS:
             for enabled in (True, False):
                 values = []
-                for compiler in COMPILERS:
+                for compiler in compilers:
                     result = shared.get((name, enabled, compiler))
                     if result is None:
                         values.append("Not run")
@@ -230,28 +236,28 @@ def render(reports, previous_reports=None, historical=False):
                         ranks[len(rows), i + 2] = ordered.index(value) + 1
                     winners = [i for i, value in enumerate(values) if value == ordered[0]]
                     if len(winners) > 1:
-                        difference = "Tie: " + "/".join(COMPILERS[i] for i in winners)
+                        difference = "Tie: " + "/".join(compilers[i] for i in winners)
                     else:
-                        difference = COMPILERS[winners[0]] + " by " + str(ordered[1] - ordered[0]) + (" instructions" if metric == "instructions" else " B")
+                        difference = compilers[winners[0]] + " by " + str(ordered[1] - ordered[0]) + (" instructions" if metric == "instructions" else " B")
                     if len(winners) != len(values):
                         highlights.update((len(rows), i + 2) for i in winners)
                 display_values = []
-                for compiler, value in zip(COMPILERS, values):
+                for compiler, value in zip(compilers, values):
                     url = assembly_links.get((name, enabled, compiler))
                     display_values.append(SourceLink(str(value), url) if url and isinstance(value, int) and metric != "instructions" else value)
                 rows.append([labels[name], "On" if enabled else "Off", *display_values, difference])
-        table(title, ["Benchmark", "Optimization", *COMPILERS, "Smallest"], rows, highlights, grouped=True, ranks=ranks)
+        table(title, ["Benchmark", "Optimization", *compilers, "Smallest"], rows, highlights, grouped=True, ranks=ranks)
         if metric == "instructions":
             paragraph("Instruction counts sum the four seeds and include the benchmark call/return, ABI register transfers, supporting functions, and linked runtime helpers. Startup, seed loading, result printing, and stack cleanup in the harness are excluded. Prefixed 6809 opcodes count as one instruction. Counts are not CPU cycles: instructions have different costs. Failed results are excluded; per-seed counts remain in the raw JSON and workflow artifacts.")
-    paragraph("Ranked code size includes the benchmark, supporting functions, linked runtime helpers, constants, and initialized data. It is the complete loaded size minus the measured harness size. Complete test program size adds the test harness back in. Both measure bytes loaded into memory, excluding uninitialized storage and file-format overhead. Badges rank each complete four-compiler row by its metric (1st is lowest); ties share a place. Rows with failed or missing results have no ranking. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
-    paragraph("Optimization on means C3's default optimizer and CMOC/LLVM -O2 plus vbcc -O=1023 (vc -O2); off disables C3's optimizer and uses CMOC/LLVM -O0 and vbcc -O=0. vbcc uses its standard assembler branch/offset relaxation at both settings. These settings do not imply identical optimization passes.")
+    paragraph("Ranked code size includes the benchmark, supporting functions, linked runtime helpers, constants, and initialized data. It is the complete loaded size minus the measured harness size. Complete test program size adds the test harness back in. Both measure bytes loaded into memory, excluding uninitialized storage and file-format overhead. Badges rank each complete compiler row by its metric (1st is lowest); ties share a place. Rows with failed or missing results have no ranking. Shaded bold values mark the smallest result; the byte gap is to the next-smallest compiler; failed or missing results are never ranked.")
+    paragraph(f"Optimization on means C3's default optimizer and {standard_compilers} -O2 plus vbcc -O=1023 (vc -O2); off disables C3's optimizer and uses {standard_compilers} -O0 and vbcc -O=0. vbcc uses its standard assembler branch/offset relaxation at both settings. These settings do not imply identical optimization passes.")
     statuses = []
     for name in BENCHMARKS:
         for enabled in (True, False):
             statuses.append([labels[name], "On" if enabled else "Off"] +
                             [shared.get((name, enabled, compiler), {}).get("status", "NOT RUN")
-                             for compiler in COMPILERS])
-    table("Shared-suite correctness", ["Benchmark", "Optimization", *COMPILERS], statuses, grouped=True)
+                             for compiler in compilers])
+    table("Shared-suite correctness", ["Benchmark", "Optimization", *compilers], statuses, grouped=True)
     failures = []
     for report in reports:
         if report.get("suite") != "kr16":
@@ -292,7 +298,7 @@ def render(reports, previous_reports=None, historical=False):
             rows.append([report.get("version", report["compiler"]), report.get("target", "Host"), report["flags"]] +
                         [statuses.get(name, "NOT RUN") for name in names])
         table(title, ["Compiler", "Target", "Flags", *names], rows)
-    paragraph("The Shared 16-bit suite uses identical K&R-compatible source for C3, CMOC, LLVM, and vbcc, 16-bit unsigned arithmetic, and one bare-metal harness. Its sort stores values in unsigned words; the original C89 sort uses bytes and 32-bit arithmetic. Compare sizes within a suite, not between suites.")
+    paragraph("The Shared 16-bit suite uses identical K&R-compatible source for " + ", ".join(compilers) + ", 16-bit unsigned arithmetic, and one bare-metal harness. Its sort stores values in unsigned words; the original C89 sort uses bytes and 32-bit arithmetic. Compare sizes within a suite, not between suites.")
     def linked_size(report, row, metric):
         if row["status"] != "PASS":
             return "Excluded (FAIL)"
@@ -339,7 +345,7 @@ def render(reports, previous_reports=None, historical=False):
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
                 '<title>The Grand 6809 C Compiler Bake-Off!</title><style>body{font:16px/1.55 system-ui;margin:2rem auto;padding:0 1.25rem;max-width:72rem;color:#172b3a;background:#f8fafc}h1{line-height:1.15}h2{margin-top:2rem;font-size:1.25rem}'
                 'table{border-collapse:collapse;width:100%;background:white}th,td{border-bottom:1px solid #dbe3eb;padding:.65rem .8rem;text-align:left;white-space:nowrap}th{background:#eaf0f6;font-size:.9rem}td:nth-child(2){white-space:normal}.number{font-variant-numeric:tabular-nums;text-align:right}.smaller{background:#e0f2e9;color:#15583a}.pass{color:#14532d;background:#dcfce7;font-weight:700}.fail{color:#b91c1c;background:#fee2e2;font-weight:700}tr.group-start{border-top:2px solid #bccbd8}tbody th[scope=rowgroup]{vertical-align:middle;background:#f0f5fa;font-size:1rem}tbody th a{white-space:normal}'
-                '.rank{display:inline-block;min-width:2.1rem;margin-left:.35rem;padding:.08rem .3rem;border:1px solid;border-radius:999px;font-size:.7rem;font-weight:700;text-align:center;vertical-align:middle}.rank-1{color:#714b00;background:#fff0b3;border-color:#d5af45}.rank-2{color:#334155;background:#e8edf3;border-color:#a8b4c3}.rank-3{color:#7c3d16;background:#f7e1cd;border-color:#cc9a70}.rank-4{color:#58616e;background:#f3f4f6;border-color:#d1d5db}.versions{padding:1rem;background:#eaf0f6;border:1px solid #bccbd8;border-radius:8px;margin:1.5rem 0}.versions h2{margin-top:0}.versions td{white-space:normal;overflow-wrap:anywhere}.versions td:first-child{font-weight:700}.scroll{overflow:auto;border:1px solid #dbe3eb;border-radius:8px}p{max-width:65rem}details{margin:1.5rem 0;padding:1rem;background:white;border:1px solid #dbe3eb;border-radius:8px}summary{cursor:pointer;font-weight:600}a{color:#145daa}@media(max-width:600px){body{margin:1rem auto;padding:0 .75rem}th,td{padding:.5rem}} </style></head><body>' + "".join(content) + '</body></html>')
+                '.rank{display:inline-block;min-width:2.1rem;margin-left:.35rem;padding:.08rem .3rem;border:1px solid;border-radius:999px;font-size:.7rem;font-weight:700;text-align:center;vertical-align:middle}.rank-1{color:#714b00;background:#fff0b3;border-color:#d5af45}.rank-2{color:#334155;background:#e8edf3;border-color:#a8b4c3}.rank-3{color:#7c3d16;background:#f7e1cd;border-color:#cc9a70}.rank-4,.rank-5{color:#58616e;background:#f3f4f6;border-color:#d1d5db}.versions{padding:1rem;background:#eaf0f6;border:1px solid #bccbd8;border-radius:8px;margin:1.5rem 0}.versions h2{margin-top:0}.versions td{white-space:normal;overflow-wrap:anywhere}.versions td:first-child{font-weight:700}.scroll{overflow:auto;border:1px solid #dbe3eb;border-radius:8px}p{max-width:65rem}details{margin:1.5rem 0;padding:1rem;background:white;border:1px solid #dbe3eb;border-radius:8px}summary{cursor:pointer;font-weight:600}a{color:#145daa}@media(max-width:600px){body{margin:1rem auto;padding:0 .75rem}th,td{padding:.5rem}} </style></head><body>' + "".join(content) + '</body></html>')
     return "\n".join(markdown), document
 
 
