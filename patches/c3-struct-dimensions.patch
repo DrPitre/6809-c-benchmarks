@@ -1,0 +1,12 @@
+diff --git a/c3/comp/declare.c b/c3/comp/declare.c
+index 6f41ffb..292d5e2 100644
+--- a/c3/comp/declare.c
++++ b/c3/comp/declare.c
+@@ -747,6 +747,7 @@ int settype(long *size, dimnode **dimptr, elem **ellist)
+ 	int type=0,tsize=2;
+ 
+ 	*ellist = 0;
++	*dimptr = NULL;
+ 	if (sym==KEYWORD) {
+ 		switch (type=symval) {
+ 			case SHORT:  type=INT;

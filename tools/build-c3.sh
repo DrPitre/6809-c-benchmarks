@@ -13,6 +13,13 @@ fi
 [ "$(git -C "$source" rev-parse HEAD)" = "$revision" ] || {
     echo "C3 source revision mismatch" >&2; exit 1;
 }
+# settype returns early for known/forward struct tags. Initialize its dimension
+# output before those returns so array declarators never traverse stack garbage.
+patchfile="$root/patches/c3-struct-dimensions.patch"
+if ! git -C "$source" apply --reverse --check "$patchfile" 2>/dev/null; then
+    git -C "$source" apply --check "$patchfile"
+    git -C "$source" apply "$patchfile"
+fi
 export PATH="$root/build/toolchain/bin:$PATH"
 # Build each required stage explicitly: the upstream aggregate recipe may
 # conceal a failing intermediate make behind a later successful stage.

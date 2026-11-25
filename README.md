@@ -270,16 +270,19 @@ Comparison tables group optimization On/Off subrows beneath one linked benchmark
 name. Expand **Test purposes and source files** for descriptions, supporting
 functions, and the original C89 suite. Links point to the exact Git commit used by CI. Local previews without a commit ID use `main`.
 
-### Failure discovered by the expanded suite
+### C3 structure-declaration fix
 
-The pinned C3 compiler built with GCC on GitHub's Linux runner crashes with
-exit 139 while compiling `list16.c`, before its target-code optimizer runs.
-Both optimizer configurations expose it. The same source compiles and executes
-correctly with the locally built C3 on macOS; CMOC and LLVM pass it on both
-hosts. This identifies a host-dependent C3 compilation failure, not a runtime
-checksum failure. The underlying compiler defect has not been diagnosed.
-The report retains the failure and excludes its size; CI correctly flags the
-C3 jobs. Source, commands, and diagnostics are preserved for investigation.
+The pinned upstream C3 compiler left `settype`'s array-dimension output
+uninitialized when returning early for an existing or forward structure tag.
+An array of structures in `list16.c` could then make the declarator traverse
+an arbitrary stack pointer, crashing Linux builds with exit 139. macOS builds
+could pass by chance because the uninitialized pointer happened to be zero.
+
+`tools/build-c3.sh` applies `patches/c3-struct-dimensions.patch` to the pinned
+source before building. It initializes the dimension output on entry, while
+preserving dimensions returned for typedefs. Benchmark sources and compiler
+optimization settings are unchanged. All twelve shared C3 tests pass at both
+settings with the fix, including all four `list16` seeds.
 
 
 ## vbcc 6809
