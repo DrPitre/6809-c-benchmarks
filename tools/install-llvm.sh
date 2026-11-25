@@ -1,21 +1,21 @@
 #!/bin/sh
-# Release candidate verified on 2026-11-22; deliberately pinned for CI.
+# Release candidate published 2026-11-24; SHA-256 pinned for CI.
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 case "$(uname -s)-$(uname -m)" in
     Darwin-arm64)
         platform=darwin-arm64
-        digest=b3997071907c213c7d23e57a7086cd6ec95ea80348d93756d8f0591a8e176ac0 ;;
+        digest=32fc2e08555296e1b5779b6c996f0ce2b268ed9e0d6e4cf9d667b4195f1657b3 ;;
     Linux-x86_64)
         platform=linux-x86_64
-        digest=d3c77f1879da9424a6ed932ef3a63d52a421d42d24884e254be7a3743b9e3072 ;;
+        digest=719165c7fecc9ac3842a4f1f48f6e306838e35f1daeddab7a51146063bdaa915 ;;
     *) echo "Supported release hosts: macOS arm64 and Linux x86_64" >&2; exit 1 ;;
 esac
-archive="mc6809-toolchain-1.1.0-rc1-$platform.tar.xz"
+archive="mc6809-toolchain-1.1.0-rc2-$platform.tar.xz"
 mkdir -p "$root/build/downloads/llvm"
 cd "$root/build/downloads/llvm"
 if [ ! -f "$archive" ]; then
-    curl --fail --location --retry 3 "https://github.com/markrvmurray/llvm-mc6809/releases/download/RELEASE_1.1.0_rc1/$archive" -o "$archive"
+    curl --fail --location --retry 3 "https://github.com/markrvmurray/llvm-mc6809/releases/download/RELEASE_1.1.0_rc2/$archive" -o "$archive"
 fi
 python3 - "$archive" "$digest" <<'PY'
 import hashlib, pathlib, sys
