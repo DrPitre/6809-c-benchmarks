@@ -1,0 +1,18 @@
+{
+  "apps": {
+    "url": "https://github.com/nitros9project/nitros9-apps.git",
+    "revision": "40fe3b20a756e93c78d5b5a81490fb8bc2c4901b"
+  },
+  "nitros9": {
+    "url": "https://github.com/nitros9project/nitros9.git",
+    "revision": "51408fab09083a4fbddcc0548958f29be174bee3"
+  },
+  "toolshed": {
+    "url": "https://github.com/nitros9project/toolshed.git",
+    "revision": "8b8d60845854642cf52cd7ad98e765d83d53ffc8"
+  },
+  "video": {
+    "url": "https://github.com/markrvmurray/pico-thing-video.git",
+    "revision": "80ef18ec0ade49779967551b3fe2389197a2946c"
+  }
+}

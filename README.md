@@ -47,7 +47,7 @@ and LWTOOLS 4.24 are built from SHA-256-verified release archives. USIM is built
 [markrvmurray/usim](https://github.com/markrvmurray/usim) revision in
 `tools/usim-revision.txt`. The two CMOC and two C3 jobs each record shared kr16 results as well as
 the original-suite results. Together with four host reports, this produces
-twenty reports, including LLVM, vbcc, and gcc6809 at `-O0` and `-O2`,
+twenty kernel/compatibility reports and one application report, including LLVM, vbcc, and gcc6809 at `-O0` and `-O2`,
 plus LLVM at `-Os` and `-Oz`. Host jobs also verify the kr16 algorithms.
 
 ## Comparison rules
@@ -509,3 +509,40 @@ CMOC_VERSION=0.1.99 sh tools/build-cmoc.sh
 
 Running the build script without that override installs 0.1.101. Both source
 archive checksums remain pinned in the script.
+
+## Real NitrOS-9 applications
+
+A separate [application comparison](https://drpitre.github.io/6809-c-benchmarks/applications.html)
+builds `uniq` and `dgrep` from pinned nitros9-apps sources. Eight configurations
+(C3 off/on, LLVM O0/O2/Os/Oz, vbcc O0/O2) execute 19 fixtures each under a real
+NitrOS-9 Level 2 kernel in Pico-Thing USIM. Complete module sizes include startup,
+linked libraries, headers and CRC. Only programs passing all their output checks
+receive a size result; application results never enter bare-metal rankings.
+
+After the existing CMOC/LWTOOLS, C3, LLVM and vbcc installation scripts, run:
+
+```sh
+# Linux prerequisites additionally include libsdl2-dev, pkg-config and zlib1g-dev.
+python3 tools/build-os9-apps.py
+python3 tools/run-os9-apps.py --json reports/os9-apps.json
+```
+
+`tools/os9-app-sources.json` pins the application, kernel, ToolShed and video
+sources; the existing USIM pin also governs the full-machine emulator. The test
+image uses standard Shell edition 22 rather than Shell+, avoiding interpretation
+of regex characters as extended shell operators. A fixed build epoch controls
+kernel disk metadata; the report records the actual workflow run date separately.
+
+Every compiler receives the same `benchmarks/os9-apps/portable.patch`, which fixes
+legacy declarations, the invalid fopen failure check, and dgrep's end anchor at
+the newline retained by fgets. Inputs use native CR line endings. Output checks
+normalize line endings only and preserve all other bytes. Fixtures cover short,
+terminated ASCII lines; long lines and unterminated input are outside this suite.
+
+C3 and vbcc pass the initial fixtures. LLVM RC2 currently reads CR-delimited files
+as one long line; those output mismatches remain visible, and its sizes are
+excluded. This suite measures complete program size, not execution speed or peak
+RAM. Requested data is the module header allocation request. CMOC and gcc6809
+await suitable OS-9 stdio/runtime integration before entering this comparison.
+The runner exits nonzero for correctness failures; CI retains that evidence and
+publishes the failures so they cannot silently become size winners.

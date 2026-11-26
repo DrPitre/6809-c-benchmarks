@@ -88,6 +88,8 @@ def render_focused(reports, history_links=(), previous_reports=False):
               '<p class="checks ' + ('ok' if passed == expected and expected else 'issue') + '">' +
               str(passed) + '/' + str(expected) + ' shared checksum checks passed · ' + str(len(BENCHMARKS)) +
               ' benchmarks · 4 seeds per configuration</p></header>']
+    if any(r.get('suite') == 'os9-apps' for r in reports):
+        chunks.append('<p><a href="applications.html">Real NitrOS-9 applications: uniq and dgrep</a></p>')
     markdown = ['# The Grand 6809 C Compiler Bake-Off!', '', date_text, '',
                 f'{passed}/{expected} shared checksum checks passed.', '']
     if passed != expected:
