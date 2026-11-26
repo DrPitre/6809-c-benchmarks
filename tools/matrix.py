@@ -331,6 +331,7 @@ def render(reports, previous_reports=None, historical=False,
                 failures.append([labels.get(row["benchmark"], row["benchmark"]), report["compiler"], report["flags"],
                                  row.get("failure_stage", "Unknown"), row.get("error", "Checksum mismatch")])
     if failures:
+        content.append('<div id="failures"></div>')
         table("Failures requiring investigation", ["Benchmark", "Compiler", "Flags", "Stage", "Diagnostic"], sorted(failures, key=lambda row: str(row[0])), grouped=True)
     paragraph("PASS means all four seeds match independent reference results. Each linked benchmark name groups its optimization settings. Supporting files are linked under Test purposes and source files. The shared sort uses unsigned words and 16-bit arithmetic; it is a distinct workload from the original C89 byte sort.")
     content.append("<details><summary>Test purposes and source files</summary>")
@@ -448,7 +449,9 @@ def main():
         histories[snapshot.parent.name] = (json.loads(data), label, data, metadata)
     previous = histories.get('cmoc-0.1.99', (None,))[0]
     links = [(name, label) for name, (_, label, _, _) in histories.items() if name != 'cmoc-0.1.99']
-    markdown, document = render(reports, previous_reports=previous, history_links=links)
+    detailed_markdown, detailed_document = render(reports, previous_reports=previous, history_links=links)
+    from focused_report import render_focused
+    markdown, document = render_focused(reports, history_links=links, previous_reports=bool(previous))
     args.output.mkdir(parents=True, exist_ok=True)
     for name, (preserved, label, data, metadata) in histories.items():
         archive = args.output / 'history' / name
@@ -464,6 +467,9 @@ def main():
     if previous:
         publish_cmoc_diffs(reports, previous, args.output)
     publish_assembly(reports, args.output)
+    detailed_document = detailed_document.replace('<body>', '<body><p><a href="index.html">Back to focused comparison</a></p>', 1)
+    (args.output / "details.html").write_text(detailed_document)
+    (args.output / "details.md").write_text(detailed_markdown)
     (args.output / "matrix.md").write_text(markdown)
     (args.output / "index.html").write_text(document)
     (args.output / "results.json").write_text(json.dumps(reports, indent=2) + "\n")
