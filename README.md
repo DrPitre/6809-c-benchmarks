@@ -514,8 +514,8 @@ archive checksums remain pinned in the script.
 ## Real NitrOS-9 applications
 
 A separate [application comparison](https://drpitre.github.io/6809-c-benchmarks/applications.html)
-builds `uniq`, `dgrep`, `ed`, `cb`, `lb`, `ppc` and MicroEMACS from pinned nitros9-apps sources. Eight configurations
-(C3 off/on, LLVM O0/O2/Os/Oz, vbcc O0/O2) execute 57 fixtures each under a real
+builds `uniq`, `dgrep`, `ed`, `cb`, `lb`, `ppc` and MicroEMACS from pinned nitros9-apps sources. Ten configurations
+(C3 off/on, LLVM O0/O2/Os/Oz, vbcc O0/O2, CMOC O0/O2) execute 57 fixtures each under a real
 NitrOS-9 Level 2 kernel in Pico-Thing USIM. Complete module sizes include startup,
 linked libraries, headers and CRC. Only programs passing all their output checks
 receive a size result; application results never enter bare-metal rankings.
@@ -540,7 +540,7 @@ the newline retained by fgets. Inputs use native CR line endings. Output checks
 normalize line endings only and preserve all other bytes. Fixtures cover short,
 terminated ASCII lines; long lines and unterminated input are outside this suite.
 
-C3, LLVM and the source-built patched vbcc pass all 456 application fixtures.
+C3, LLVM, the source-built patched vbcc and CMOC pass all 570 application fixtures.
 vbcc's frontend previously narrowed the one-past offset for a 256-byte array
 to an 8-bit value. `patches/vbcc-array-offset/fix.patch` corrects the boundary
 checks for all candidate offset types. `tools/build-vbcc-compiler.py` verifies
@@ -634,7 +634,7 @@ The report records the clock adapter hash alongside the prepared sources.
 ### MicroEMACS redirected ANSI editor
 
 MicroEMACS adds nine scripted keyboard sessions in every configuration,
-bringing the suite to 56 modules and 456 fixtures. They cover insertion,
+bringing the suite to 70 modules and 570 fixtures. They cover insertion,
 native file loading and modification, deletion and line joining, kill/yank,
 word case, forward search, marked-region deletion, keyboard macros and automatic word wrapping.
 Every session writes a file whose native CR bytes are checked exactly.
@@ -659,3 +659,25 @@ cover the actual compiled translation units and headers.
 
 For a focused local run: `python3 tools/run-os9-apps.py --application uemacs
 --json build/reports/uemacs.json`. The normal workflow always runs all apps.
+
+### CMOC with nitros9-c-libs
+
+CMOC 0.1.101 participates in the OS-9 application suite at `-O0` and `-O2`.
+Both link the pinned `nitros9project/nitros9-c-libs` non-floating-point
+`libc.a` with `-nodefaultlibs`. The library’s C objects use `-O2` in both
+configurations. All seven applications run the same 57 fixtures.
+
+`tools/build-nitros9-c-libs.py`, invoked by the environment builder, verifies
+the source revision and tracked-file cleanliness, builds `libc.a` from scratch,
+and records the compiler hash, library hash, flags and commands in
+`build/cmoc-os9/LIBRARY.json`. The runner verifies both hashes before use.
+The library archive and build log are included in the CI evidence artifact.
+
+Applications reserve an additional 2048 stack bytes when compiling their
+main translation unit. This affects requested data memory, not module size.
+The common portability patch supplies CMOC prototypes and explicit aggregate
+braces. The shared text adapter selects native CR terminators for CMOC’s
+input API, including saved text and lb’s module listing; binary archive bytes
+remain unchanged. CMOC uses the stack-based MicroEMACS message formatter.
+The ROF header byte array is unsigned for CMOC, avoiding sign extension of
+masked header bytes during long shifts.

@@ -14,7 +14,8 @@ CONFIGURATIONS = [('c300', 'C3 optimizer off', 'c3', '0'),
                   ('c302', 'C3 optimizer on', 'c3', '2'),
                   ('ll00', 'LLVM -O0', 'llvm', '0'), ('ll02', 'LLVM -O2', 'llvm', '2'),
                   ('llos', 'LLVM -Os', 'llvm', 's'), ('lloz', 'LLVM -Oz', 'llvm', 'z'),
-                  ('vb00', 'VBCC -O0', 'vbcc', '0'), ('vb02', 'VBCC -O2', 'vbcc', '2')]
+                  ('vb00', 'VBCC -O0', 'vbcc', '0'), ('vb02', 'VBCC -O2', 'vbcc', '2'),
+                  ('cm00', 'CMOC -O0', 'cmoc', '0'), ('cm02', 'CMOC -O2', 'cmoc', '2')]
 APPLICATIONS = {'uniq': ('kreider/uniq/uniq.c', 'uq'), 'dgrep': ('kreider/dgrep/grep.c', 'dg'), 'ed': ('ed/ed.c', 'ed'),
                 'cb': ('kreider/cb/cb.c', 'cb'), 'lb': ('kreider/lb/lb.c', 'lb'),
                 'ppc': ('kreider/ppc/ppc.c', 'pp'),
@@ -102,6 +103,8 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     c3 = ROOT / 'build/sources/nitros9-languages/c3'
+    cmoc_library = ROOT / 'build/cmoc-os9'
+    cmoc_headers = ROOT / 'build/sources/nitros9-c-libs/include'
     vbcc = ROOT / 'build/vbcc'
     llvm = ROOT / 'build/llvm/bin/mc6809-os9-clang'
     toolbin = ROOT / 'build/toolchain/bin'
@@ -122,11 +125,17 @@ def main():
               'compiler_versions': {'C3': (ROOT / 'tools/c3-revision.txt').read_text().strip(),
                                     'LLVM': (ROOT / 'build/llvm/VERSION').read_text().strip(),
                                     'VBCC': '6809 Release 1 Preview 2026-01-25; archive SHA-256 18db043d4d4c8b0a16d4fa4b813616f277fcfb3667be0eda2334a8b8b024917e'},
+              'cmoc_library': json.loads((cmoc_library / 'LIBRARY.json').read_text()),
               'vbcc_compiler_patch': json.loads((vbcc / 'COMPILER-PATCH.json').read_text()),
               'vbcc_os9_runtime': json.loads((vbcc / 'OS9-RUNTIME.json').read_text()),
               'llvm_runtime': json.loads((ROOT / 'build/llvm/OS9-RUNTIME.json').read_text()),
               'rows': [], 'commands': []}
 
+    if digest(cmoc_library / 'libc.a') != report['cmoc_library']['library_sha256']:
+        raise ValueError('CMOC OS-9 library does not match its build manifest')
+    if digest(toolbin / 'cmoc') != report['cmoc_library']['compiler_sha256']:
+        raise ValueError('CMOC compiler does not match the library build manifest')
+    report['compiler_versions']['CMOC'] = report['cmoc_library']['compiler_version']
     if digest(vbcc / 'bin/vbcchc12') != report['vbcc_compiler_patch']['compiler_sha256']:
         raise ValueError('VBCC compiler does not match the source-build manifest')
 
@@ -169,6 +178,19 @@ def main():
     run(['patch', '--batch', '-p1', '-i', str(ROOT / 'benchmarks/os9-apps/portable.patch')], source_copy)
     shutil.copyfile(ROOT / 'benchmarks/os9-apps/ppc-clock.c', source_copy / 'kreider/ppc/ppc-clock.c')
     shutil.copyfile(ROOT / 'benchmarks/os9-apps/uemacs-stream.c', source_copy / 'uemacs/uemacs-stream.c')
+    # Match each runtime's native text terminator; raw binary operations stay unchanged.
+    for app, (relative, _) in APPLICATIONS.items():
+        folder = source_copy / Path(relative).parent
+        shutil.copyfile(ROOT / 'benchmarks/os9-apps/native-text.h', folder / 'native-text.h')
+        for source in folder.iterdir():
+            if source.suffix not in ('.c', '.h') or source.name == 'native-text.h':
+                continue
+            text = source.read_text().replace("'\\n'", 'BENCH_NL')
+            text = re.sub(r'"(?:\\.|[^"\\])*"',
+                          lambda match: ('BENCH_TEXT(' + match[0] + ', ' + match[0].replace('\\n', '\\r') + ')')
+                          if '\\n' in match[0] else match[0], text)
+            source.write_text(('#include "native-text.h"\n' if source.suffix == '.c' else '') + text)
+    report['native_text_header_sha256'] = digest(ROOT / 'benchmarks/os9-apps/native-text.h')
     report['uemacs_terminal'] = 'Redirected ANSI 80x24; raw scripted input; no terminal negotiation'
     report['ppc_clock'] = {'timestamp': '2026-11-26 13:45:06',
                            'source_sha256': digest(ROOT / 'benchmarks/os9-apps/ppc-clock.c')}
@@ -192,7 +214,17 @@ def main():
             report['rows'].append(row)
             (folder / name).unlink(missing_ok=True)
             try:
-                if compiler == 'c3':
+                if compiler == 'cmoc':
+                    objects = []
+                    for source_name in source_names:
+                        obj = Path(source_name).stem + '.o'
+                        run(['cmoc', '--os9', '-nodefaultlibs', '--cpp=cpp -Wno-builtin-macro-redefined',
+                             '-I' + str(cmoc_headers), '-DBENCH_CMOC', '--add-os9-stack-space=2048', '-O' + optimization,
+                             '-c', '-o' + obj, source_name], folder)
+                        objects.append(obj)
+                    run(['cmoc', '--os9', '-nodefaultlibs', '--add-os9-stack-space=2048', '-o' + name, *objects,
+                         '-L' + str(cmoc_library), '-lc'], folder)
+                elif compiler == 'c3':
                     run(['c3', '-y', '-q', *(['-dBENCH_C3'] if app in ('ed', 'lb', 'ppc', 'uemacs') else []), *source_names, *(['-o'] if optimization == '0' else []), '-f=' + name], folder)
                 elif compiler == 'llvm':
                     run([str(llvm), '-mcpu=mc6809', '-std=gnu89', '-Wno-implicit-int',
