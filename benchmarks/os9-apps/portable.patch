@@ -381,3 +381,225 @@
     header(name);
     while (fgets(buf,LMAX,fp)!=NULL)
        {
+--- a/uemacs/ueed.h
++++ b/uemacs/ueed.h
+@@ -187,3 +187,16 @@
+ extern  LINE    *lalloc();              /* Allocate a line              */
+ 
+ 
++
++/* Common redirected ANSI benchmark profile; no terminal ioctl negotiation. */
++#ifndef OS9
++#define OS9 1
++#endif
++#define ANSI 1
++#define BENCH_STREAM 1
++#include <stdlib.h>
++#include <string.h>
++#ifndef BENCH_C3
++#include <stdarg.h>
++int mlwrite(const char *, ...);
++#endif
+--- a/uemacs/ueansi.c
++++ b/uemacs/ueansi.c
+@@ -8,7 +8,7 @@
+ #include        "ueed.h"
+ 
+ #ifdef ANSI
+-#ifdef OS9
++#if defined(OS9) && !defined(BENCH_STREAM)
+ #include        <os9.h>
+ #endif
+ 
+@@ -87,7 +87,7 @@
+         ttputc((n%10) + '0');
+ }
+ 
+-#ifdef OS9
++#if defined(OS9) && !defined(BENCH_STREAM)
+ #define SS_READY 0x01                   /* GetStat: is input waiting?   */
+ #define SS_SCSIZ 0x26                   /* GetStat: screen size         */
+ #define MAXROW  127                     /* A window's rows are a char.  */
+@@ -200,7 +200,7 @@
+ #endif
+         ttopen();
+ #ifdef ANSI
+-#ifdef OS9
++#if defined(OS9) && !defined(BENCH_STREAM)
+         ansisize();
+ #endif
+ #endif
+--- a/uemacs/uemain1.c
++++ b/uemacs/uemain1.c
+@@ -40,6 +40,7 @@
+ #include "uemain.h"
+ 
+ main(argc, argv)
++int argc;
+ char    *argv[];
+ {
+         register int    c;
+@@ -113,7 +114,7 @@
+         if (c == (CTRL|'X'))                    /* ^X is a prefix       */
+                 c = CTLX | getctl();
+         if (kbdmip != NULL) {                   /* Save macro strokes.  */
+-                if (kbdmip == kbdm[NKBDM-6])
++                if (kbdmip >= &kbdm[NKBDM-6])
+ /*                if (c != ( CTLX | ')' ) && kbdmip > &kbdm[NKBDM-6]) */
+ 		{
+                         ctrlg(FALSE, 0);
+--- a/uemacs/uedisplay3.c
++++ b/uemacs/uedisplay3.c
+@@ -25,6 +25,7 @@
+  * on OSK despite the fact the first two arguments are passed in registers.
+  * Set the "message line" flag TRUE.
+  */
++#ifdef BENCH_C3
+ mlwrite(fmt, arg)
+     char *fmt;
+     {
+@@ -77,6 +78,37 @@
+     (*term.t_flush)();
+     mpresf = TRUE;
+     }
++
++#else
++int mlwrite(const char *fmt, ...)
++{
++    int c;
++    va_list ap;
++    va_start(ap, fmt);
++    movecursor(term.t_nrow, 0);
++    while ((c = *fmt++) != 0) {
++        if (c != '%') {
++            (*term.t_putchar)(c);
++            ++ttcol;
++        } else {
++            c = *fmt++;
++            switch (c) {
++            case 'd': mlputi(va_arg(ap, int), 10); break;
++            case 'o': mlputi(va_arg(ap, int), 8); break;
++            case 'x': mlputi(va_arg(ap, int), 16); break;
++            case 'D': mlputli(va_arg(ap, long), 10); break;
++            case 's': mlputs(va_arg(ap, char *)); break;
++            default: (*term.t_putchar)(c); ++ttcol;
++            }
++        }
++    }
++    va_end(ap);
++    (*term.t_eeol)();
++    (*term.t_flush)();
++    mpresf = TRUE;
++    return 0;
++}
++#endif
+ 
+ /*
+  * Write out a string. Update the physical cursor position. This assumes that
+--- a/uemacs/uebuffer2.c
++++ b/uemacs/uebuffer2.c
+@@ -111,9 +111,9 @@
+                 bp->b_bufp  = bheadp;
+                 bheadp = bp;
+                 bp->b_dotp  = lp;
+-                bp->b_doto  = 
+-                bp->b_markp = 
+-                bp->b_marko = 
++                bp->b_doto  = 0;
++                bp->b_markp = 0;
++                bp->b_marko = 0;
+                 bp->b_nwnd  = 0;
+                 bp->b_linep = lp;
+                 bp->b_flag  = bflag;
+@@ -149,8 +149,8 @@
+         while ((lp=lforw(bp->b_linep)) != bp->b_linep)
+                 lfree(lp);
+         bp->b_dotp  = bp->b_linep;              /* Fix "."              */
+-        bp->b_doto  = 
+-        bp->b_markp =                      /* Invalidate "mark"    */
++        bp->b_doto  = 0;
++        bp->b_markp = 0;                      /* Invalidate "mark"    */
+         bp->b_marko = 0;
+         return (TRUE);
+ }
+--- a/uemacs/uefile1.c
++++ b/uemacs/uefile1.c
+@@ -173,8 +173,8 @@
+                 if (wp->w_bufp == curbp) {
+                         wp->w_linep = lforw(curbp->b_linep);
+                         wp->w_dotp  = lforw(curbp->b_linep);
+-                        wp->w_doto  = 
+-                        wp->w_markp = 
++                        wp->w_doto  = 0;
++                        wp->w_markp = 0;
+                         wp->w_marko = 0;
+                         wp->w_flag |= WFMODE|WFHARD;
+                 }
+--- a/uemacs/uemain4.c
++++ b/uemacs/uemain4.c
+@@ -50,11 +50,11 @@
+         bp->b_nwnd  = 1;                        /* Displayed.           */
+         wp->w_linep = bp->b_linep;
+         wp->w_dotp  = bp->b_linep;
+-        wp->w_wndp  =                      /* Initialize window    */
+-        wp->w_doto  = 
+-        wp->w_markp = 
+-        wp->w_marko = 
+-        wp->w_toprow = 
++        wp->w_wndp  = 0;                      /* Initialize window    */
++        wp->w_doto  = 0;
++        wp->w_markp = 0;
++        wp->w_marko = 0;
++        wp->w_toprow = 0;
+         wp->w_force = 0;
+         wp->w_ntrows = term.t_nrow-1;           /* "-1" for mode line.  */
+         wp->w_flag  = WFMODE|WFHARD;            /* Full.                */
+--- a/uemacs/uedisplay1.c
++++ b/uemacs/uedisplay1.c
+@@ -48,12 +48,16 @@
+         if (vp == NULL)
+             exit(1);
+ 
++        vp->v_flag = 0;
++        memset(vp->v_text, ' ', term.t_ncol);
+         vscreen[i] = vp;
+         vp = (VIDEO *) malloc(sizeof(VIDEO)+term.t_ncol);
+ 
+         if (vp == NULL)
+             exit(1);
+ 
++        vp->v_flag = 0;
++        memset(vp->v_text, ' ', term.t_ncol);
+         pscreen[i] = vp;
+         }
+ }
+@@ -387,7 +391,7 @@
+      * be hard operations that do a lot of update, so I don't really care.
+      */
+     if (cp1 == &vline[term.t_ncol])             /* All equal. */
+-        return;
++        return 0;
+ 
+     nbflag = FALSE;
+     cp3 = &vline[term.t_ncol];          /* Compute right match. */
+--- a/uemacs/ueword.c
++++ b/uemacs/ueword.c
+@@ -19,7 +19,8 @@
+ wrapword(n)
+ int n;
+ {
+-        register int cnt, oldp;
++        register int cnt;
++        LINE *oldp;
+         oldp = curwp->w_dotp;
+         cnt = -1;
+         do {                            
+@@ -30,7 +31,7 @@
+         while (! inword());
+         if (! backword(NULL, 1))
+                 return(FALSE);
+-        if (oldp == (int) (curwp->w_dotp && curwp->w_doto)) {
++        if (oldp == curwp->w_dotp && curwp->w_doto) {
+                 if (! backdel(NULL, 1))
+                         return(FALSE);
+                 if (! newline(NULL, 1))

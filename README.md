@@ -514,8 +514,8 @@ archive checksums remain pinned in the script.
 ## Real NitrOS-9 applications
 
 A separate [application comparison](https://drpitre.github.io/6809-c-benchmarks/applications.html)
-builds `uniq`, `dgrep`, `ed`, `cb`, `lb` and `ppc` from pinned nitros9-apps sources. Eight configurations
-(C3 off/on, LLVM O0/O2/Os/Oz, vbcc O0/O2) execute 48 fixtures each under a real
+builds `uniq`, `dgrep`, `ed`, `cb`, `lb`, `ppc` and MicroEMACS from pinned nitros9-apps sources. Eight configurations
+(C3 off/on, LLVM O0/O2/Os/Oz, vbcc O0/O2) execute 57 fixtures each under a real
 NitrOS-9 Level 2 kernel in Pico-Thing USIM. Complete module sizes include startup,
 linked libraries, headers and CRC. Only programs passing all their output checks
 receive a size result; application results never enter bare-metal rankings.
@@ -540,7 +540,7 @@ the newline retained by fgets. Inputs use native CR line endings. Output checks
 normalize line endings only and preserve all other bytes. Fixtures cover short,
 terminated ASCII lines; long lines and unterminated input are outside this suite.
 
-C3, LLVM and the source-built patched vbcc pass all 384 application fixtures.
+C3, LLVM and the source-built patched vbcc pass all 456 application fixtures.
 vbcc's frontend previously narrowed the one-past offset for a 256-byte array
 to an 8-bit value. `patches/vbcc-array-offset/fix.patch` corrects the boundary
 checks for all candidate offset types. `tools/build-vbcc-compiler.py` verifies
@@ -630,3 +630,32 @@ All eight configurations compile the same `ppc-clock.c` adapter in place of
 and pagination use the upstream implementation; comparisons preserve
 spaces and form-feed bytes and normalize only text line endings.
 The report records the clock adapter hash alongside the prepared sources.
+
+### MicroEMACS redirected ANSI editor
+
+MicroEMACS adds nine scripted keyboard sessions in every configuration,
+bringing the suite to 56 modules and 456 fixtures. They cover insertion,
+native file loading and modification, deletion and line joining, kill/yank,
+word case, forward search, marked-region deletion, keyboard macros and automatic word wrapping.
+Every session writes a file whose native CR bytes are checked exactly.
+The transcript must contain the expected write-status message and no bell,
+NUL, non-ASCII corruption or exhausted-script error; ANSI transcripts are
+retained as evidence rather than compared byte-for-byte.
+
+The full command loop, editing routines, file I/O and ANSI redisplay are
+compiled. `uemacs-stream.c` replaces interactive terminal mode/size queries
+with raw redirected OS-9 read/write streams at fixed 80x24 geometry. EOF
+fails immediately. The native OS-9 single-window command profile is retained;
+terminal negotiation and subprocess spawning are not exercised. Every
+compiler receives the same prepared source and terminal adapter.
+
+The common patch adds declarations, separates mixed pointer/integer zero
+initializers, initializes allocated display flags/text, corrects the macro
+limit pointer and word-wrap pointer types, and supplies portable stdarg
+message formatting for LLVM/vbcc. C3 retains its runtime stack convention.
+The stdarg adapter calls va_start before nested calls to avoid vbcc's
+preview mishandling of outstanding stack arguments. Prepared-source hashes
+cover the actual compiled translation units and headers.
+
+For a focused local run: `python3 tools/run-os9-apps.py --application uemacs
+--json build/reports/uemacs.json`. The normal workflow always runs all apps.

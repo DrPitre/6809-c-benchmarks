@@ -37,3 +37,25 @@ class ApplicationChecksTests(unittest.TestCase):
     def test_duplicate_configuration_cannot_replace_a_missing_regression(self):
         self.report['vbcc_pointer_probes'][1]['configuration_id'] = 'vb00'
         self.assertFalse(apps.report_passes(self.report, 2))
+
+
+class TerminalOutputTests(unittest.TestCase):
+    def setUp(self):
+        self.case = {'expected': None, 'output_contains': ['[Wrote 1 line]'],
+                     'files': [{'status': 'PASS'}]}
+
+    def test_requires_terminal_assertions_and_exact_file_checks(self):
+        self.assertTrue(apps.output_matches(self.case, '\x1b[24;1H[Wrote 1 line]'))
+        self.assertFalse(apps.output_matches(self.case, '[Wrote 2 lines]'))
+        self.case['files'] = []
+        self.assertFalse(apps.output_matches(self.case, '[Wrote 1 line]'))
+
+    def test_rejects_exhaustion_and_corrupt_or_error_output(self):
+        for suffix in ['UEMACS SCRIPT EXHAUSTED', '\0', '\a', '\ufffd']:
+            self.assertFalse(apps.output_matches(self.case, '[Wrote 1 line]' + suffix))
+        self.assertFalse(apps.output_matches(self.case, None))
+
+    def test_line_output_still_requires_exact_text(self):
+        self.case['expected'] = 'exact\n'
+        self.assertTrue(apps.output_matches(self.case, 'exact\n'))
+        self.assertFalse(apps.output_matches(self.case, 'exact extra\n'))
