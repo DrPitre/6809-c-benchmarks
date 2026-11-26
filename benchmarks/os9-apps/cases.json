@@ -402,5 +402,139 @@
         "hex": "62cd23871180001a0b1a0d0a0100000000000004000300200100000072656673000002656e747279000400006461746100010002000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f0d0a00ff800d0a00016f75747369646500000220000a20000d000320000320000a20000d"
       }
     }
+  },
+  {
+    "id": "numbered",
+    "app": "ppc",
+    "args": [
+      "@SOURCE@"
+    ],
+    "isolated": true,
+    "input": "",
+    "files": {
+      "SOURCE": {
+        "path": "sample",
+        "text": "alpha\nbeta\n"
+      }
+    },
+    "output": "\n\nsample                                      11/26/26  13:45:06       Page   1\n\n  1=alpha\n  2=beta\n\f"
+  },
+  {
+    "id": "no-numbers",
+    "app": "ppc",
+    "args": [
+      "-n",
+      "@SOURCE@"
+    ],
+    "isolated": true,
+    "input": "",
+    "files": {
+      "SOURCE": {
+        "path": "sample",
+        "text": "alpha\nbeta\n"
+      }
+    },
+    "output": "\n\nsample                                      11/26/26  13:45:06       Page   1\n\nalpha\nbeta\n\f"
+  },
+  {
+    "id": "forced-page",
+    "app": "ppc",
+    "args": [
+      "@SOURCE@"
+    ],
+    "isolated": true,
+    "input": "",
+    "files": {
+      "SOURCE": {
+        "path": "sample",
+        "text": "alpha\n/*page*/\nbeta\n"
+      }
+    },
+    "output": "\n\nsample                                      11/26/26  13:45:06       Page   1\n\n  1=alpha\n\f\n\nsample                                      11/26/26  13:45:06       Page   2\n\n  3=beta\n\f"
+  },
+  {
+    "id": "suppression",
+    "app": "ppc",
+    "args": [
+      "@SOURCE@"
+    ],
+    "isolated": true,
+    "input": "",
+    "files": {
+      "SOURCE": {
+        "path": "sample",
+        "text": "alpha\n/*noprint*/\nhidden\n/*print*/\nbeta\n"
+      }
+    },
+    "output": "\n\nsample                                      11/26/26  13:45:06       Page   1\n\n  1=alpha\n  5=beta\n\f"
+  },
+  {
+    "id": "page-boundary",
+    "app": "ppc",
+    "args": [
+      "@SOURCE@"
+    ],
+    "isolated": true,
+    "input": "",
+    "files": {
+      "SOURCE": {
+        "path": "sample",
+        "text": "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\nline13\nline14\nline15\nline16\nline17\nline18\nline19\nline20\nline21\nline22\nline23\nline24\nline25\nline26\nline27\nline28\nline29\nline30\nline31\nline32\nline33\nline34\nline35\nline36\nline37\nline38\nline39\nline40\nline41\nline42\nline43\nline44\nline45\nline46\nline47\nline48\nline49\nline50\nline51\nline52\nline53\nline54\nline55\nline56\nline57\nline58\nline59\nline60\nline61\n"
+      }
+    },
+    "output": "\n\nsample                                      11/26/26  13:45:06       Page   1\n\n  1=line1\n  2=line2\n  3=line3\n  4=line4\n  5=line5\n  6=line6\n  7=line7\n  8=line8\n  9=line9\n 10=line10\n 11=line11\n 12=line12\n 13=line13\n 14=line14\n 15=line15\n 16=line16\n 17=line17\n 18=line18\n 19=line19\n 20=line20\n 21=line21\n 22=line22\n 23=line23\n 24=line24\n 25=line25\n 26=line26\n 27=line27\n 28=line28\n 29=line29\n 30=line30\n 31=line31\n 32=line32\n 33=line33\n 34=line34\n 35=line35\n 36=line36\n 37=line37\n 38=line38\n 39=line39\n 40=line40\n 41=line41\n 42=line42\n 43=line43\n 44=line44\n 45=line45\n 46=line46\n 47=line47\n 48=line48\n 49=line49\n 50=line50\n 51=line51\n 52=line52\n 53=line53\n 54=line54\n 55=line55\n 56=line56\n 57=line57\n 58=line58\n 59=line59\n\f\n\nsample                                      11/26/26  13:45:06       Page   2\n\n 60=line60\n 61=line61\n\f"
+  },
+  {
+    "id": "multiple-files",
+    "app": "ppc",
+    "args": [
+      "@SOURCE@",
+      "@OTHER@"
+    ],
+    "isolated": true,
+    "input": "",
+    "files": {
+      "SOURCE": {
+        "path": "sample",
+        "text": "alpha\n"
+      },
+      "OTHER": {
+        "path": "other",
+        "text": "beta\n"
+      }
+    },
+    "output": "\n\nsample                                      11/26/26  13:45:06       Page   1\n\n  1=alpha\n\f\n\nother                                       11/26/26  13:45:06       Page   1\n\n  1=beta\n\f"
+  },
+  {
+    "id": "empty",
+    "app": "ppc",
+    "args": [
+      "@SOURCE@"
+    ],
+    "isolated": true,
+    "input": "",
+    "files": {
+      "SOURCE": {
+        "path": "sample",
+        "text": ""
+      }
+    },
+    "output": "\n\nsample                                      11/26/26  13:45:06       Page   1\n\n\f"
+  },
+  {
+    "id": "directives-column-one",
+    "app": "ppc",
+    "args": [
+      "@SOURCE@"
+    ],
+    "isolated": true,
+    "input": "",
+    "files": {
+      "SOURCE": {
+        "path": "sample",
+        "text": " /*page*/\n/*page*/ trailing\n/*print*/ trailing\n"
+      }
+    },
+    "output": "\n\nsample                                      11/26/26  13:45:06       Page   1\n\n  1= /*page*/\n  2=/*page*/ trailing\n  3=/*print*/ trailing\n\f"
   }
 ]

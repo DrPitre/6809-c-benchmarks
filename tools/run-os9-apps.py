@@ -16,7 +16,8 @@ CONFIGURATIONS = [('c300', 'C3 optimizer off', 'c3', '0'),
                   ('llos', 'LLVM -Os', 'llvm', 's'), ('lloz', 'LLVM -Oz', 'llvm', 'z'),
                   ('vb00', 'VBCC -O0', 'vbcc', '0'), ('vb02', 'VBCC -O2', 'vbcc', '2')]
 APPLICATIONS = {'uniq': ('kreider/uniq/uniq.c', 'uq'), 'dgrep': ('kreider/dgrep/grep.c', 'dg'), 'ed': ('ed/ed.c', 'ed'),
-                'cb': ('kreider/cb/cb.c', 'cb'), 'lb': ('kreider/lb/lb.c', 'lb')}
+                'cb': ('kreider/cb/cb.c', 'cb'), 'lb': ('kreider/lb/lb.c', 'lb'),
+                'ppc': ('kreider/ppc/ppc.c', 'pp')}
 
 
 def digest(path):
@@ -151,6 +152,9 @@ def main():
             if source.suffix in ('.c', '.h'):
                 shutil.copyfile(source, destination / source.name)
     run(['patch', '--batch', '-p1', '-i', str(ROOT / 'benchmarks/os9-apps/portable.patch')], source_copy)
+    shutil.copyfile(ROOT / 'benchmarks/os9-apps/ppc-clock.c', source_copy / 'kreider/ppc/ppc-clock.c')
+    report['ppc_clock'] = {'timestamp': '2026-11-26 13:45:06',
+                           'source_sha256': digest(ROOT / 'benchmarks/os9-apps/ppc-clock.c')}
     pending = []
     for config, label, compiler, optimization in selected:
         for app, (relative, prefix) in APPLICATIONS.items():
@@ -169,7 +173,7 @@ def main():
             (folder / name).unlink(missing_ok=True)
             try:
                 if compiler == 'c3':
-                    run(['c3', '-y', '-q', *(['-dBENCH_C3'] if app in ('ed', 'lb') else []), *source_names, *(['-o'] if optimization == '0' else []), '-f=' + name], folder)
+                    run(['c3', '-y', '-q', *(['-dBENCH_C3'] if app in ('ed', 'lb', 'ppc') else []), *source_names, *(['-o'] if optimization == '0' else []), '-f=' + name], folder)
                 elif compiler == 'llvm':
                     run([str(llvm), '-mcpu=mc6809', '-std=gnu89', '-Wno-implicit-int',
                          '-Wno-implicit-function-declaration', '-Wno-deprecated-non-prototype',
@@ -231,7 +235,10 @@ def main():
                 resource = work / input_name
                 resource.write_bytes(fixture_bytes(commands))
                 run([os9, 'copy', '-r', str(resource), str(disk) + ',BENCH/' + directory + input_name])
-            words = [module.name] + [('in' + str(i)) if arg == 'INPUT' else arg for arg in case['args']]
+            arguments = [('in' + str(i)) if arg == 'INPUT' else arg for arg in case['args']]
+            for token, replacement in replacements.items():
+                arguments = [arg.replace(token, replacement) for arg in arguments]
+            words = [module.name] + arguments
             command = ' '.join(words)
             if 'INPUT' not in case['args']:
                 command += ' <' + input_name

@@ -343,3 +343,41 @@
 +   if (putc((word >> 8) & 255,fp) == EOF || putc(word & 255,fp) == EOF)
 +         werror("ROF word");
 +}
+--- a/kreider/ppc/ppc.c
++++ b/kreider/ppc/ppc.c
+@@ -15,6 +15,9 @@
+ /*      Carl Kreider                                                */
+ /********************************************************************/
+ #include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++int bench_getime();
+ #define TRUE 1
+ #define FALSE 0
+ #define LMAX 121
+@@ -30,6 +33,9 @@
+ char *argv[];
+    {
+    char ch, *p;
++#ifdef BENCH_C3
++   pflinit();
++#endif
+    if (argc < 2)
+          {
+          help(' ');                                 /* no args */
+@@ -54,13 +60,14 @@
+                   paginate(*argv);
+             }
+       }
++   return 0;
+    }
+ /*page*/
+ paginate(name)
+ char *name;
+    {
+    pagno=linno=curlin=0;
+-   getime(tbuf);
++   bench_getime(tbuf);
+    header(name);
+    while (fgets(buf,LMAX,fp)!=NULL)
+       {
