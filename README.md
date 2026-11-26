@@ -73,6 +73,19 @@ are not bundled.
 
 ## Published matrix
 
+The landing page has three focused views: **Smallest code**, **Fewest
+instructions**, and **Size versus execution**. Each ranks compiler-and-flags
+configurations together, including LLVM `-O2`, `-Os`, and `-Oz`. Optimized
+configurations are shown first; per-test assembly links, unoptimized builds,
+versions, and historical runs are collapsed. Full on/off tables, compatibility
+checks, and detailed methodology remain on `details.html`, with a complete
+Markdown version in `details.md`. `matrix.md` is the compact summary.
+
+Size and instruction indices give each benchmark equal weight. All optimized
+configurations use the same intersection of tests with valid passing metrics.
+The tradeoff view has no combined score: it highlights configurations that
+are not dominated on the two indices. Instruction count is not cycle timing.
+
 The page shows the benchmark workflow's start date and time in Eastern time,
 with a link to the run. The same timestamp is saved in `results.json`, so
 regenerating the page does not change the run date. Historical reports without
@@ -244,11 +257,11 @@ banners are retained in CI artifacts. Ranked code size counts loaded benchmark,
 support, and runtime-helper bytes, including constants and initialized data,
 minus the measured harness. It excludes BSS, metadata, and ELF headers.
 
-`-O2` is a general optimization setting. A separate **LLVM size optimization
+`-O2` is a general optimization setting. The detailed report’s **LLVM size optimization
 versus vbcc** section compares LLVM `-O2`, `-Os`, and `-Oz` with vbcc `-O=1023`
 (`vc -O2`). It includes normalized size rankings, total code plus helpers,
 per-test sizes and instruction counts, correctness, and four-way assembly
-comparisons. The original five-compiler on/off rankings retain LLVM `-O2` and
+comparisons. The detailed five-compiler on/off rankings retain LLVM `-O2` and
 `-O0`; size modes never replace those measurements. All three LLVM optimized
 configurations receive identical sources, ABI, libraries, and harnesses.
 Smaller-size optimization requests do not guarantee smaller final programs:
