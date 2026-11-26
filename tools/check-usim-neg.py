@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory() as directory:
         subprocess.run([args.lwasm, '--format=srec', '-o', str(output), str(source)], check=True)
         subprocess.run([args.usim, str(output)], check=True, timeout=10)
         print(f'{mode}: all 256 inputs passed (result and NZVC)')
-    source = Path(__file__).resolve().with_name('neg16.asm')
+    source = Path(__file__).resolve().with_name('usim-neg16.asm')
     output = path / 'neg16.srec'
     subprocess.run([args.lwasm, '--format=srec', '-o', str(output), str(source)], check=True)
     subprocess.run([args.usim, str(output)], check=True, timeout=10)
