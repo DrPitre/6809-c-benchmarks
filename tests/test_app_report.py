@@ -17,7 +17,7 @@ class ApplicationReportTests(unittest.TestCase):
              'module_bytes': 12345, 'requested_data_bytes': 23456,
              'cases': [{'status': 'PASS'}]}]}
         page = render_applications([report])
-        self.assertIn('1/2 output checks passed', page)
+        self.assertIn('1/2 application fixtures passed', page)
         self.assertIn('12345', page)
         self.assertNotIn('987654', page)
         self.assertNotIn('876543', page)

@@ -228,7 +228,7 @@ jobs:
           python3 tools/run-os9-apps.py --configuration ll02 --json build/os9-fast/report.json
           python3 tools/build-llvm-os9-runtime.py
       - name: Execute application output checks
-        run: python3 tools/run-os9-apps.py --json reports/os9-apps.json
+        run: python3 tools/run-os9-apps.py --allow-vbcc-ed-offset-bug --json reports/os9-apps.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

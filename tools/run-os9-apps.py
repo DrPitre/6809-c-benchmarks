@@ -15,7 +15,7 @@ CONFIGURATIONS = [('c300', 'C3 optimizer off', 'c3', '0'),
                   ('ll00', 'LLVM -O0', 'llvm', '0'), ('ll02', 'LLVM -O2', 'llvm', '2'),
                   ('llos', 'LLVM -Os', 'llvm', 's'), ('lloz', 'LLVM -Oz', 'llvm', 'z'),
                   ('vb00', 'VBCC -O0', 'vbcc', '0'), ('vb02', 'VBCC -O2', 'vbcc', '2')]
-APPLICATIONS = {'uniq': ('kreider/uniq/uniq.c', 'uq'), 'dgrep': ('kreider/dgrep/grep.c', 'dg')}
+APPLICATIONS = {'uniq': ('kreider/uniq/uniq.c', 'uq'), 'dgrep': ('kreider/dgrep/grep.c', 'dg'), 'ed': ('ed/ed.c', 'ed')}
 
 
 def digest(path):
@@ -50,6 +50,29 @@ def module_info(path, expected_name):
             'module_sha256': digest(path), 'module_name': name}
 
 
+def known_vbcc_ed_offset_failure(row):
+    """Recognize only the captured substitution failure in the pinned preview.
+
+    Keep the row FAIL and its sizes excluded. CI can opt in to accepting this
+    exact result while treating different output, failed builds, and any other
+    failing fixture as a new failure.
+    """
+    if row.get('application') != 'ed' or row.get('configuration_id') not in ('vb00', 'vb02'):
+        return False
+    if row.get('stage') != 'execution' or len(row.get('cases', [])) != 8:
+        return False
+    failed = {c['id']: c for c in row['cases'] if c['status'] != 'PASS'}
+    if set(failed) != {'substitute', 'save-reopen'}:
+        return False
+    if failed['substitute'].get('actual') != '?\nalpha alpha\nbeta\n':
+        return False
+    saved = failed['save-reopen']
+    return (saved.get('actual') == '?\nalpha\nbeta\n'
+            and len(saved.get('files', [])) == 1
+            and saved['files'][0].get('id') == 'RESULT'
+            and saved['files'][0].get('actual') == 'alpha\rbeta\r')
+
+
 def normalize(data):
     return data.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
 
@@ -58,6 +81,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--json', type=Path, required=True)
     parser.add_argument('--configuration', action='append', help='Limit to named config IDs for local checks')
+    parser.add_argument('--allow-vbcc-ed-offset-bug', action='store_true',
+                        help='Accept only the documented vbcc ed substitution failure in CI; rows stay FAIL')
     parser.add_argument('--runtime-probe', type=Path, default=ROOT / 'build/sources/picolibc/test/test-stdio/test-os9-text.c')
     parser.add_argument('--wall-seconds', type=int, default=180)
     args = parser.parse_args()
@@ -118,27 +143,34 @@ def main():
             folder.mkdir(parents=True, exist_ok=True)
             for source in (source_copy / Path(relative).parent).iterdir():
                 shutil.copyfile(source, folder / source.name)
+            source_names = sorted(p.name for p in folder.glob('*.c'))
+            prepared = {p.name: digest(p) for p in sorted(folder.iterdir()) if p.suffix in ('.c', '.h')}
             name = prefix + config  # Six characters for every configuration: equal name overhead.
             row = {'application': app, 'configuration': label, 'configuration_id': config,
                    'benchmark': app, 'status': 'FAIL', 'stage': 'build', 'cases': [],
+                   'prepared_sources_sha256': prepared,
                    'source_file': relative, 'prepared_source_sha256': digest(folder / Path(relative).name)}
             report['rows'].append(row)
             (folder / name).unlink(missing_ok=True)
             try:
                 if compiler == 'c3':
-                    run(['c3', '-y', '-q', Path(relative).name, *(['-o'] if optimization == '0' else []), '-f=' + name], folder)
+                    run(['c3', '-y', '-q', *(['-dBENCH_C3'] if app == 'ed' else []), *source_names, *(['-o'] if optimization == '0' else []), '-f=' + name], folder)
                 elif compiler == 'llvm':
                     run([str(llvm), '-mcpu=mc6809', '-std=gnu89', '-Wno-implicit-int',
                          '-Wno-implicit-function-declaration', '-Wno-deprecated-non-prototype',
-                         '-O' + optimization, '-Wl,-Map=' + name + '.map', Path(relative).name, '-o', name], folder)
+                         '-O' + optimization, '-Wl,-Map=' + name + '.map', *source_names, '-o', name], folder)
                 else:
-                    run([str(vbcc / 'bin/vbcchc12'), '-cpu=6809', '-pcrel', '-drel',
-                         '-I' + str(vbcc / 'targets/6809-os9/include'), '-O=' + ('0' if optimization == '0' else '1023'),
-                         Path(relative).name, '-o=' + name + '.s'], folder)
-                    run([str(vbcc / 'bin/vasm6809_std'), '-quiet', '-Fvobj', '-nowarn=62', '-opt-branch', '-opt-offset',
-                         name + '.s', '-o', name + '.o'], folder)
+                    objects = []
+                    for source_name in source_names:
+                        stem = Path(source_name).stem
+                        run([str(vbcc / 'bin/vbcchc12'), '-cpu=6809', '-pcrel', '-drel',
+                             '-I' + str(vbcc / 'targets/6809-os9/include'), '-O=' + ('0' if optimization == '0' else '1023'),
+                             source_name, '-o=' + stem + '.s'], folder)
+                        run([str(vbcc / 'bin/vasm6809_std'), '-quiet', '-Fvobj', '-nowarn=62', '-opt-branch', '-opt-offset',
+                             stem + '.s', '-o', stem + '.o'], folder)
+                        objects.append(stem + '.o')
                     run([str(vbcc / 'bin/vlink'), '-bos9-6809', '-L' + str(vbcc / 'targets/6809-os9/lib'),
-                         str(vbcc / 'targets/6809-os9/lib/startup.o'), name + '.o', '-o', name, '-lvc', '-los9'], folder)
+                         str(vbcc / 'targets/6809-os9/lib/startup.o'), *objects, '-o', name, '-lvc', '-los9'], folder)
                 row.update(module_info(folder / name, name))
                 row['stage'] = 'execution'
                 pending.append((row, folder / name))
@@ -162,14 +194,35 @@ def main():
             if case['app'] != row['application']:
                 continue
             output_name = 'o' + row['configuration_id'] + str(i)
+            input_name = 'in' + str(i)
+            replacements = {}
+            file_checks = []
+            for kind in ('files', 'output_files'):
+                for j, (token, contents) in enumerate(case.get(kind, {}).items()):
+                    disk_name = ('f' if kind == 'files' else 's') + row['configuration_id'] + str(i) + str(j)
+                    replacements['@' + token + '@'] = disk_name
+                    if kind == 'files':
+                        resource = work / disk_name
+                        resource.write_bytes(contents.replace('\n', '\r').encode('ascii'))
+                        run([os9, 'copy', '-r', str(resource), str(disk) + ',BENCH/' + disk_name])
+                    else:
+                        file_checks.append({'id': token, 'output_file': disk_name, 'expected': contents, 'status': 'NOT RUN'})
+            if replacements:
+                input_name = 'c' + row['configuration_id'] + str(i)
+                commands = case['input']
+                for token, replacement in replacements.items():
+                    commands = commands.replace(token, replacement)
+                resource = work / input_name
+                resource.write_bytes(commands.replace('\n', '\r').encode('ascii'))
+                run([os9, 'copy', '-r', str(resource), str(disk) + ',BENCH/' + input_name])
             words = [module.name] + [('in' + str(i)) if arg == 'INPUT' else arg for arg in case['args']]
             command = ' '.join(words)
             if 'INPUT' not in case['args']:
-                command += ' <in' + str(i)
+                command += ' <' + input_name
             startup.append('echo CASE' + row['configuration_id'] + str(i))
             startup.append(command + ' >' + output_name)
             row['cases'].append({'id': case['id'], 'output_file': output_name,
-                                 'expected': case['output'], 'status': 'NOT RUN'})
+                                 'expected': case['output'], 'files': file_checks, 'status': 'NOT RUN'})
     probe = work / 'iotest'
     run([str(llvm), '-mcpu=mc6809', '-O2', str(args.runtime_probe), '-o', str(probe)])
     report['runtime_probe'] = {'status': 'FAIL', 'source_sha256': digest(args.runtime_probe),
@@ -220,19 +273,29 @@ def main():
             result = run([os9, 'copy', '-r', str(disk) + ',BENCH/' + case['output_file'], str(host)], check=False)
             actual = normalize(host.read_bytes()).decode('ascii', errors='replace') if host.exists() else None
             case['actual'] = actual
+            for saved in case.get('files', []):
+                destination = work / (saved['output_file'] + '.txt')
+                destination.unlink(missing_ok=True)
+                copied = run([os9, 'copy', '-r', str(disk) + ',BENCH/' + saved['output_file'], str(destination)], check=False)
+                raw = destination.read_bytes() if destination.exists() else None
+                saved['actual'] = raw.decode('ascii', errors='replace') if raw is not None else None
+                expected = saved['expected'].replace('\n', '\r').encode('ascii')
+                saved['status'] = 'PASS' if copied.returncode == 0 and raw == expected else 'FAIL'
             fixture_index = next(i for i, fixture in enumerate(cases)
                                  if fixture['app'] == row['application'] and fixture['id'] == case['id'])
             marker = ('CASE' + row['configuration_id'] + str(fixture_index) + '\n').encode()
             segment = console.split(marker, 1)[-1].split(b'CASE', 1)[0].split(b'APPDONE', 1)[0]
             executed = marker in console and not re.search(rb'(?i)(error\s*#|WHAT\?)', segment)
-            case['status'] = 'PASS' if ready and executed and result.returncode == 0 and actual == case['expected'] else 'FAIL'
+            case['status'] = 'PASS' if ready and executed and result.returncode == 0 and actual == case['expected'] and all(f['status'] == 'PASS' for f in case.get('files', [])) else 'FAIL'
         row['status'] = 'PASS' if row['cases'] and all(c['status'] == 'PASS' for c in row['cases']) else 'FAIL'
         if row['status'] != 'PASS':
             row['error'] = 'OS-9 execution did not complete or fixture output mismatch'
+        if known_vbcc_ed_offset_failure(row):
+            row['known_failure'] = 'Pinned vbcc preview drops the 256-byte offset in buf + 256'
         print(row['configuration'], row['application'], row['status'], flush=True)
     args.json.parent.mkdir(parents=True, exist_ok=True)
     args.json.write_text(json.dumps(report, indent=2) + '\n')
-    return 0 if report['runtime_probe']['status'] == 'PASS' and len(report['rows']) == len(selected) * 2 and all(r['status'] == 'PASS' for r in report['rows']) else 1
+    return 0 if report['runtime_probe']['status'] == 'PASS' and len(report['rows']) == len(selected) * len(APPLICATIONS) and all(r['status'] == 'PASS' or (args.allow_vbcc_ed_offset_bug and known_vbcc_ed_offset_failure(r)) for r in report['rows']) else 1
 
 
 if __name__ == '__main__':

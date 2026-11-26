@@ -513,8 +513,8 @@ archive checksums remain pinned in the script.
 ## Real NitrOS-9 applications
 
 A separate [application comparison](https://drpitre.github.io/6809-c-benchmarks/applications.html)
-builds `uniq` and `dgrep` from pinned nitros9-apps sources. Eight configurations
-(C3 off/on, LLVM O0/O2/Os/Oz, vbcc O0/O2) execute 19 fixtures each under a real
+builds `uniq`, `dgrep` and `ed` from pinned nitros9-apps sources. Eight configurations
+(C3 off/on, LLVM O0/O2/Os/Oz, vbcc O0/O2) execute 27 fixtures each under a real
 NitrOS-9 Level 2 kernel in Pico-Thing USIM. Complete module sizes include startup,
 linked libraries, headers and CRC. Only programs passing all their output checks
 receive a size result; application results never enter bare-metal rankings.
@@ -539,7 +539,14 @@ the newline retained by fgets. Inputs use native CR line endings. Output checks
 normalize line endings only and preserve all other bytes. Fixtures cover short,
 terminated ASCII lines; long lines and unterminated input are outside this suite.
 
-C3, vbcc and LLVM RC2 with the pinned OS-9 runtime fix pass the fixtures.
+C3 and LLVM RC2 with the pinned OS-9 runtime fix pass every fixture. vbcc
+passes uniq/dgrep and six of eight ed cases. The pinned preview drops a 256-byte
+automatic-array pointer offset, breaking ed substitution. Its two failing ed
+rows stay FAIL and receive no size result; see `benchmarks/os9-apps/vbcc-ed-offset.c`.
+CI opts into accepting only the exact recorded output/file failures with
+`--allow-vbcc-ed-offset-bug`. Other output differences, failed builds, failed
+runtime probes or failing fixtures still fail the job. The runner is strict
+without this flag.
 The LLVM compiler remains the released RC2 binary. `tools/llvm-os9-runtime.json`
 pins the picolibc source fix; `tools/install-llvm.sh` rebuilds its default 6809
 integer OS-9 C library with Meson 1.11.2. Other bundled targets and variants
@@ -559,3 +566,13 @@ RAM. Requested data is the module header allocation request. CMOC and gcc6809
 await suitable OS-9 stdio/runtime integration before entering this comparison.
 The runner exits nonzero for application or runtime regression failures; CI retains
 the evidence and reports failures so they cannot silently become size winners.
+
+ed fixtures cover append/print, global substitution, deletion, insertion,
+move, global matching, native CR file input, and save/reopen. The saved file
+must match native CR bytes exactly, in addition to matching stdout. Each run
+uses private fixture/output filenames per compiler configuration. Every ed C
+and header file is fingerprinted, and all 37 translation units are linked with
+each compiler's own runtime. The common patch supplies missing declarations
+and fixes the signal-handler return type; only C3 defines `BENCH_C3` to retain
+its explicit `pflinit` call. Interactive signal handling and unexercised editor
+commands are outside this scripted comparison.
