@@ -15,7 +15,8 @@ CONFIGURATIONS = [('c300', 'C3 optimizer off', 'c3', '0'),
                   ('ll00', 'LLVM -O0', 'llvm', '0'), ('ll02', 'LLVM -O2', 'llvm', '2'),
                   ('llos', 'LLVM -Os', 'llvm', 's'), ('lloz', 'LLVM -Oz', 'llvm', 'z'),
                   ('vb00', 'VBCC -O0', 'vbcc', '0'), ('vb02', 'VBCC -O2', 'vbcc', '2')]
-APPLICATIONS = {'uniq': ('kreider/uniq/uniq.c', 'uq'), 'dgrep': ('kreider/dgrep/grep.c', 'dg'), 'ed': ('ed/ed.c', 'ed')}
+APPLICATIONS = {'uniq': ('kreider/uniq/uniq.c', 'uq'), 'dgrep': ('kreider/dgrep/grep.c', 'dg'), 'ed': ('ed/ed.c', 'ed'),
+                'cb': ('kreider/cb/cb.c', 'cb'), 'lb': ('kreider/lb/lb.c', 'lb')}
 
 
 def digest(path):
@@ -76,6 +77,15 @@ def known_vbcc_ed_offset_failure(row):
             and saved['files'][0].get('actual') == 'alpha\rbeta\r')
 
 
+def fixture_bytes(value):
+    """Decode fixture bytes without applying text conversion to binary data."""
+    if isinstance(value, dict):
+        if 'hex' in value:
+            return bytes.fromhex(value['hex'])
+        value = value['text']
+    return value.replace('\n', '\r').encode('ascii')
+
+
 def normalize(data):
     return data.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
 
@@ -113,6 +123,7 @@ def main():
               'compiler_versions': {'C3': (ROOT / 'tools/c3-revision.txt').read_text().strip(),
                                     'LLVM': (ROOT / 'build/llvm/VERSION').read_text().strip(),
                                     'VBCC': '6809 Release 1 Preview 2026-01-25; archive SHA-256 18db043d4d4c8b0a16d4fa4b813616f277fcfb3667be0eda2334a8b8b024917e'},
+              'vbcc_os9_runtime': json.loads((vbcc / 'OS9-RUNTIME.json').read_text()),
               'llvm_runtime': json.loads((ROOT / 'build/llvm/OS9-RUNTIME.json').read_text()),
               'rows': [], 'commands': []}
 
@@ -157,7 +168,7 @@ def main():
             (folder / name).unlink(missing_ok=True)
             try:
                 if compiler == 'c3':
-                    run(['c3', '-y', '-q', *(['-dBENCH_C3'] if app == 'ed' else []), *source_names, *(['-o'] if optimization == '0' else []), '-f=' + name], folder)
+                    run(['c3', '-y', '-q', *(['-dBENCH_C3'] if app in ('ed', 'lb') else []), *source_names, *(['-o'] if optimization == '0' else []), '-f=' + name], folder)
                 elif compiler == 'llvm':
                     run([str(llvm), '-mcpu=mc6809', '-std=gnu89', '-Wno-implicit-int',
                          '-Wno-implicit-function-declaration', '-Wno-deprecated-non-prototype',
@@ -173,7 +184,8 @@ def main():
                              stem + '.s', '-o', stem + '.o'], folder)
                         objects.append(stem + '.o')
                     run([str(vbcc / 'bin/vlink'), '-bos9-6809', '-L' + str(vbcc / 'targets/6809-os9/lib'),
-                         str(vbcc / 'targets/6809-os9/lib/startup.o'), *objects, '-o', name, '-lvc', '-los9'], folder)
+                         str(vbcc / 'targets/6809-os9/lib/startup.o'),
+                         str(vbcc / 'targets/6809-os9/lib/bench-rw.o'), *objects, '-o', name, '-lvc', '-los9'], folder)
                 row.update(module_info(folder / name, name))
                 row['stage'] = 'execution'
                 pending.append((row, folder / name))
@@ -188,7 +200,7 @@ def main():
     startup = ['chx /dd/bench/cmds', 'chd /dd/bench', 'echo APPBEGIN']
     for i, case in enumerate(cases):
         path = work / ('in' + str(i))
-        path.write_bytes(case['input'].replace('\n', '\r').encode('ascii'))
+        path.write_bytes(bytes.fromhex(case['input_hex']) if 'input_hex' in case else fixture_bytes(case['input']))
         run([os9, 'copy', '-r', str(path), str(disk) + ',BENCH/in' + str(i)])
     for row, module in pending:
         run([os9, 'copy', '-r', str(module), str(disk) + ',BENCH/CMDS/' + module.name])
@@ -196,35 +208,48 @@ def main():
         for i, case in enumerate(cases):
             if case['app'] != row['application']:
                 continue
+            directory = ('d' + row['configuration_id'] + str(i) + '/') if case.get('isolated') else ''
+            if directory:
+                run([os9, 'makdir', str(disk) + ',BENCH/' + directory.rstrip('/')])
+                run([os9, 'copy', '-r', str(work / ('in' + str(i))), str(disk) + ',BENCH/' + directory + 'in' + str(i)])
+                startup.append('chd /dd/bench/' + directory.rstrip('/'))
             output_name = 'o' + row['configuration_id'] + str(i)
             input_name = 'in' + str(i)
             replacements = {}
             file_checks = []
             for kind in ('files', 'output_files'):
                 for j, (token, contents) in enumerate(case.get(kind, {}).items()):
-                    disk_name = ('f' if kind == 'files' else 's') + row['configuration_id'] + str(i) + str(j)
+                    disk_name = (contents.get('path') if isinstance(contents, dict) else None)
+                    disk_name = disk_name or (('f' if kind == 'files' else 's') + row['configuration_id'] + str(i) + str(j))
                     replacements['@' + token + '@'] = disk_name
                     if kind == 'files':
-                        resource = work / disk_name
-                        resource.write_bytes(contents.replace('\n', '\r').encode('ascii'))
-                        run([os9, 'copy', '-r', str(resource), str(disk) + ',BENCH/' + disk_name])
+                        resource = work / ('resource-' + row['configuration_id'] + str(i) + str(j))
+                        resource.write_bytes(fixture_bytes(contents))
+                        run([os9, 'copy', '-r', str(resource), str(disk) + ',BENCH/' + directory + disk_name])
                     else:
-                        file_checks.append({'id': token, 'output_file': disk_name, 'expected': contents, 'status': 'NOT RUN'})
-            if replacements:
+                        check = {'id': token, 'output_file': directory + disk_name, 'status': 'NOT RUN'}
+                        if isinstance(contents, dict) and 'hex' in contents:
+                            check['expected_hex'] = contents['hex']
+                        else:
+                            check['expected'] = contents['text'] if isinstance(contents, dict) else contents
+                        file_checks.append(check)
+            if replacements and 'input' in case:
                 input_name = 'c' + row['configuration_id'] + str(i)
                 commands = case['input']
                 for token, replacement in replacements.items():
                     commands = commands.replace(token, replacement)
                 resource = work / input_name
-                resource.write_bytes(commands.replace('\n', '\r').encode('ascii'))
-                run([os9, 'copy', '-r', str(resource), str(disk) + ',BENCH/' + input_name])
+                resource.write_bytes(fixture_bytes(commands))
+                run([os9, 'copy', '-r', str(resource), str(disk) + ',BENCH/' + directory + input_name])
             words = [module.name] + [('in' + str(i)) if arg == 'INPUT' else arg for arg in case['args']]
             command = ' '.join(words)
             if 'INPUT' not in case['args']:
                 command += ' <' + input_name
             startup.append('echo CASE' + row['configuration_id'] + str(i))
             startup.append(command + ' >' + output_name)
-            row['cases'].append({'id': case['id'], 'output_file': output_name,
+            if directory:
+                startup.append('chd /dd/bench')
+            row['cases'].append({'id': case['id'], 'output_file': directory + output_name,
                                  'expected': case['output'], 'files': file_checks, 'status': 'NOT RUN'})
     probe = work / 'iotest'
     run([str(llvm), '-mcpu=mc6809', '-O2', str(args.runtime_probe), '-o', str(probe)])
@@ -272,6 +297,7 @@ def main():
     for row, module in pending:
         for case in row['cases']:
             host = work / (case['output_file'] + '.txt')
+            host.parent.mkdir(parents=True, exist_ok=True)
             host.unlink(missing_ok=True)
             result = run([os9, 'copy', '-r', str(disk) + ',BENCH/' + case['output_file'], str(host)], check=False)
             actual = normalize(host.read_bytes()).decode('ascii', errors='replace') if host.exists() else None
@@ -279,12 +305,17 @@ def main():
             case['copied'] = result.returncode == 0
             for saved in case.get('files', []):
                 destination = work / (saved['output_file'] + '.txt')
+                destination.parent.mkdir(parents=True, exist_ok=True)
                 destination.unlink(missing_ok=True)
                 copied = run([os9, 'copy', '-r', str(disk) + ',BENCH/' + saved['output_file'], str(destination)], check=False)
                 raw = destination.read_bytes() if destination.exists() else None
                 saved['copied'] = copied.returncode == 0
                 saved['actual'] = raw.decode('ascii', errors='replace') if raw is not None else None
-                expected = saved['expected'].replace('\n', '\r').encode('ascii')
+                if 'expected_hex' in saved:
+                    saved['actual_hex'] = raw.hex() if raw is not None else None
+                    expected = bytes.fromhex(saved['expected_hex'])
+                else:
+                    expected = fixture_bytes(saved['expected'])
                 saved['status'] = 'PASS' if copied.returncode == 0 and raw == expected else 'FAIL'
             fixture_index = next(i for i, fixture in enumerate(cases)
                                  if fixture['app'] == row['application'] and fixture['id'] == case['id'])
