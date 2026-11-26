@@ -47,7 +47,8 @@ and LWTOOLS 4.24 are built from SHA-256-verified release archives. USIM is built
 [markrvmurray/usim](https://github.com/markrvmurray/usim) revision in
 `tools/usim-revision.txt`. The two CMOC and two C3 jobs each record shared kr16 results as well as
 the original-suite results. Together with four host reports, this produces
-eighteen reports, including LLVM, vbcc, and gcc6809 at `-O0` and `-O2`. Host jobs also verify the kr16 algorithms.
+twenty reports, including LLVM, vbcc, and gcc6809 at `-O0` and `-O2`,
+plus LLVM at `-Os` and `-Oz`. Host jobs also verify the kr16 algorithms.
 
 ## Comparison rules
 
@@ -221,6 +222,8 @@ sh tools/build-cmoc.sh  # supplies the common USIM simulator
 sh tools/install-llvm.sh
 python3 tools/run-kr16.py --compiler llvm --optimization 0 --json build/reports/kr16-llvm-O0.json
 python3 tools/run-kr16.py --compiler llvm --optimization 2 --json build/reports/kr16-llvm-O2.json
+python3 tools/run-kr16.py --compiler llvm --optimization s --json build/reports/kr16-llvm-Os.json
+python3 tools/run-kr16.py --compiler llvm --optimization z --json build/reports/kr16-llvm-Oz.json
 python3 tools/matrix.py build/reports build/site
 ```
 
@@ -241,14 +244,22 @@ banners are retained in CI artifacts. Ranked code size counts loaded benchmark,
 support, and runtime-helper bytes, including constants and initialized data,
 minus the measured harness. It excludes BSS, metadata, and ELF headers.
 
-`-O2` is a general optimization setting, not a size-minimizing setting. LLVM
-unrolls the CRC loop at `-O2`, so its code can be larger than at `-O0`.
-The matrix reports actual sizes without interpreting size as execution speed.
+`-O2` is a general optimization setting. A separate **LLVM size optimization
+versus vbcc** section compares LLVM `-O2`, `-Os`, and `-Oz` with vbcc `-O=1023`
+(`vc -O2`). It includes normalized size rankings, total code plus helpers,
+per-test sizes and instruction counts, correctness, and four-way assembly
+comparisons. The original five-compiler on/off rankings retain LLVM `-O2` and
+`-O0`; size modes never replace those measurements. All three LLVM optimized
+configurations receive identical sources, ABI, libraries, and harnesses.
+Smaller-size optimization requests do not guarantee smaller final programs:
+linked helper choices and backend decisions also contribute.
 
 ## Expanded shared test coverage
 
 The kr16 suite contains 12 tests, each run with four seeds on all five
 compilers at two optimization settings: **480 target checksum checks**.
+The two additional LLVM size modes add **96 target checksum checks**, for
+**576** across all recorded shared configurations.
 Host GCC/Clang also check the shared sources. The original three C89 tests
 remain a separate suite.
 
