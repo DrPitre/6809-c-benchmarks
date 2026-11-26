@@ -13,6 +13,26 @@ spec.loader.exec_module(cmoc)
 
 
 class ReportTests(unittest.TestCase):
+    def test_run_date_comes_from_results_and_has_timezone_and_workflow_link(self):
+        report = {'compiler': 'CMOC', 'target': '6809 / USIM', 'flags': '-O2',
+                  'revision': 'abc', 'rows': [], 'run_started_at': '2026-11-26T13:16:07Z',
+                  'workflow_run_url': 'https://github.com/DrPitre/6809-c-benchmarks/actions/runs/123'}
+        markdown, document = render([report])
+        for text in (markdown, document):
+            self.assertIn('Run started: ', text)
+            self.assertIn('November 26, 2026 at 8:16 AM EST', text)
+            self.assertIn(report['workflow_run_url'], text)
+        self.assertIn('<time datetime="2026-11-26T13:16:07Z">', document)
+        # A local/old report has no fabricated run date.
+        report.pop('run_started_at')
+        self.assertIn('Run date: not recorded', render([report])[1])
+        report['run_started_at'] = '2026-11-26T13:16:07'
+        with self.assertRaises(ValueError):
+            render([report])
+        report['run_started_at'] = '2026-11-26T13:16:07Z'
+        with self.assertRaises(ValueError):
+            render([report, dict(report, run_started_at='2026-11-27T13:16:07Z')])
+
     def measure(self, text):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'test.srec'

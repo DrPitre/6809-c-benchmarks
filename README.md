@@ -8,7 +8,7 @@ extensions belong in separately labeled comparisons.
 ## Current status
 
 The shared **kr16** suite runs identical K&R-compatible sources under
-C3 (C-Cubed), CMOC, LLVM-MC6809 1.1.0-rc1, vbcc, and JKBert/gcc6809 on a bare-metal 6809 simulator. All five compilers are checked
+C3 (C-Cubed), CMOC, LLVM-MC6809 1.1.0-rc2, vbcc, and JKBert/gcc6809 on a bare-metal 6809 simulator. All five compilers are checked
 with optimization disabled and enabled. All twelve shared benchmarks must match independent
 reference results for four seeds before their sizes enter the comparison.
 
@@ -71,6 +71,11 @@ the same benchmark functions and measurement boundaries. Compiler binaries and R
 are not bundled.
 
 ## Published matrix
+
+The page shows the benchmark workflow's start date and time in Eastern time,
+with a link to the run. The same timestamp is saved in `results.json`, so
+regenerating the page does not change the run date. Historical reports without
+a recorded timestamp say so explicitly.
 
 CI collects JSON results from every compiler/optimization job and generates a
 benchmark-by-compiler matrix. Failed checks remain visible as FAIL; missing
@@ -189,13 +194,18 @@ so this is a bare-metal benchmark function comparison, not an OS-9 runtime compa
 Only required compiler runtime archive members are linked. Ranked code size includes
 those helpers and excludes the common harness; complete size includes both.
 
-## LLVM-MC6809 1.1.0-rc1
+## LLVM-MC6809 1.1.0-rc2
 
-[Release 1.1.0-rc1](https://github.com/markrvmurray/llvm-mc6809/releases/tag/RELEASE_1.1.0_rc1)
-is a **prerelease**, published November 22, 2026. CI pins this exact candidate
+[Release 1.1.0-rc2](https://github.com/markrvmurray/llvm-mc6809/releases/tag/RELEASE_1.1.0_rc2)
+is a **prerelease**, published November 24, 2026. CI pins this exact candidate
 and its published SHA-256 archive checksums. The version banner records LLVM
 clang 24.0.0 and compiler revision
-`4d1562877f55663dcc04defa5e7fcc002585bd70`.
+`19fc4dc208bed7d29e31eeeac21edf177fec5fb6`.
+
+The published RC1 results are preserved in `history/llvm-1.1.0-rc1/results.json`,
+with their original simulator provenance and workflow start time. The site
+links that historical report. RC2's release notes describe unchanged compiler
+code generation; the benchmark rerun checks its actual sizes and instructions.
 
 The preceding five-compiler results are preserved in
 `history/llvm-1.0/results.json`, with checksums, assembly, maps, source hashes,

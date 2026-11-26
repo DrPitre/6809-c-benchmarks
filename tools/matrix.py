@@ -7,6 +7,8 @@ import json
 import math
 import re
 from dataclasses import dataclass
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from urllib.parse import quote
 from shared_suite import BENCHMARKS, LABELS, PURPOSES, sources
 from pathlib import Path
@@ -92,12 +94,30 @@ def ordinal(rank):
 
 
 def render(reports, previous_reports=None, historical=False,
-           historical_label="CMOC 0.1.99", history_links=()):
+           historical_label="CMOC 0.1.99", history_links=(),
+           run_started_at=None, run_url=None):
     compilers = comparison_compilers(reports)
     standard_compilers = "CMOC/LLVM" + ("/gcc6809" if "GCC6809" in compilers else "")
     validate_shared_sources(reports)
     markdown = ["# The Grand 6809 C Compiler Bake-Off!", ""]
     content = ["<h1>The Grand 6809 C Compiler Bake-Off!</h1>"]
+    recorded_dates = {r['run_started_at'] for r in reports if r.get('run_started_at')}
+    if len(recorded_dates) > 1:
+        raise ValueError('Reports contain different benchmark run dates')
+    run_started_at = run_started_at or next(iter(recorded_dates), None)
+    run_url = run_url or next((r['workflow_run_url'] for r in reports if r.get('workflow_run_url')), None)
+    if run_started_at:
+        started = datetime.fromisoformat(run_started_at.replace('Z', '+00:00'))
+        if started.tzinfo is None:
+            raise ValueError('Run date must include a timezone')
+        label = started.astimezone(ZoneInfo('America/New_York')).strftime('%B %-d, %Y at %-I:%M %p %Z')
+        markdown.extend(['Run started: ' + label + ('. [Workflow run](' + run_url + ')' if run_url else ''), ''])
+        content.append('<p>Run started: <time datetime="' + html.escape(run_started_at, quote=True) + '">' +
+                       html.escape(label) + '</time>' +
+                       ('. <a href="' + html.escape(run_url, quote=True) + '">Workflow run</a>' if run_url else '') + '</p>')
+    else:
+        markdown.extend(['Run date: not recorded', ''])
+        content.append('<p>Run date: not recorded</p>')
     repository = "https://github.com/DrPitre/6809-c-benchmarks"
     markdown.extend(["[View repository on GitHub](" + repository + ")", ""])
     content.append('<p><a href="' + repository + '">View repository on GitHub</a></p>')
@@ -372,10 +392,17 @@ def main():
     parser.add_argument("input", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--expected-reports", type=int)
+    parser.add_argument("--run-started-at", help="Workflow start time in ISO 8601 with timezone")
+    parser.add_argument("--run-url", help="Workflow run URL")
     args = parser.parse_args()
     reports = [json.loads(p.read_text()) for p in sorted(args.input.glob("*.json"))]
     if not reports or (args.expected_reports is not None and len(reports) != args.expected_reports):
         raise SystemExit("Missing reports; refusing to publish an incomplete matrix")
+    if args.run_started_at:
+        for report in reports:
+            report['run_started_at'] = args.run_started_at
+            if args.run_url:
+                report['workflow_run_url'] = args.run_url
     history_root = Path(__file__).resolve().parents[1] / 'history'
     histories = {}
     for snapshot in sorted(history_root.glob('*/results.json')):
@@ -384,15 +411,18 @@ def main():
         if hashlib.sha256(data).hexdigest() != metadata['results_sha256']:
             raise ValueError('Historical snapshot digest mismatch: ' + snapshot.parent.name)
         label = metadata.get('label', 'CMOC 0.1.99' if snapshot.parent.name == 'cmoc-0.1.99' else snapshot.parent.name)
-        histories[snapshot.parent.name] = (json.loads(data), label, data)
+        histories[snapshot.parent.name] = (json.loads(data), label, data, metadata)
     previous = histories.get('cmoc-0.1.99', (None,))[0]
-    links = [(name, label) for name, (_, label, _) in histories.items() if name != 'cmoc-0.1.99']
+    links = [(name, label) for name, (_, label, _, _) in histories.items() if name != 'cmoc-0.1.99']
     markdown, document = render(reports, previous_reports=previous, history_links=links)
     args.output.mkdir(parents=True, exist_ok=True)
-    for name, (preserved, label, data) in histories.items():
+    for name, (preserved, label, data, metadata) in histories.items():
         archive = args.output / 'history' / name
         archive.mkdir(parents=True, exist_ok=True)
-        old_markdown, old_document = render(preserved, historical=True, historical_label=label)
+        old_markdown, old_document = render(preserved, historical=True, historical_label=label,
+                                             run_started_at=metadata.get("run_started_at"),
+                                             run_url=("https://github.com/DrPitre/6809-c-benchmarks/actions/runs/" +
+                                                      str(metadata["workflow_run"])) if metadata.get("workflow_run") else None)
         (archive / 'index.html').write_text(old_document)
         (archive / 'matrix.md').write_text(old_markdown)
         (archive / 'results.json').write_bytes(data)

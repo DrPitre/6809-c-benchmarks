@@ -4,6 +4,7 @@ on: [push, pull_request, workflow_dispatch]
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   check:
@@ -118,7 +119,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y build-essential bison flex curl xz-utils
       - name: Build pinned simulator dependency
         run: sh tools/build-cmoc.sh
-      - name: Install pinned LLVM-MC6809 1.1.0-rc1
+      - name: Install pinned LLVM-MC6809 1.1.0-rc2
         run: sh tools/install-llvm.sh
       - name: Run shared kr16 kernels with LLVM
         if: always()
@@ -223,8 +224,13 @@ jobs:
       - name: Verify report handling
         run: python3 -m unittest discover -s tests
       - name: Generate matrix
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          python3 tools/matrix.py reports build/site --expected-reports 18
+          started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
+          python3 tools/matrix.py reports build/site --expected-reports 18 \
+            --run-started-at "$started" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           cat build/site/matrix.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
