@@ -1,5 +1,5 @@
 """Render recorded host and 6809 checks without conflating their results."""
-from assembly_report import COMPILERS, comparison_compilers, assembly_url, publish_assembly, changed_cmoc_results, cmoc_diff_url, publish_cmoc_diffs
+from assembly_report import SIZE_CONFIGURATIONS, size_configurations, size_assembly_url, COMPILERS, comparison_compilers, assembly_url, publish_assembly, changed_cmoc_results, cmoc_diff_url, publish_cmoc_diffs
 import argparse
 import html
 import hashlib
@@ -218,6 +218,8 @@ def render(reports, previous_reports=None, historical=False,
         compiler = report["compiler"].upper()
         if compiler not in compilers:
             continue
+        if report["flags"] in ("-Os", "-Oz"):
+            continue
         enabled = report["flags"] in ("optimizer on", "-O2")
         for row in report["rows"]:
             key = (row["benchmark"], enabled, compiler)
@@ -285,6 +287,38 @@ def render(reports, previous_reports=None, historical=False,
                             [shared.get((name, enabled, compiler), {}).get("status", "NOT RUN")
                              for compiler in compilers])
     table("Shared-suite correctness", ["Benchmark", "Optimization", *compilers], statuses, grouped=True)
+    size_reports = size_configurations(reports)
+    if size_reports:
+        variants = tuple(item[0] for item in SIZE_CONFIGURATIONS)
+        size_shared = {(row['benchmark'], True, label): row
+                       for label, report in size_reports.items() for row in report['rows']}
+        paragraph("LLVM size optimization versus vbcc: compare the same sources at LLVM -O2, -Os and -Oz against vbcc -O=1023 (vc -O2). These are separate measured configurations; the original on/off rankings above continue to use -O2. Code includes linked runtime helpers and excludes the harness. Lower is better.")
+        ranking, eligible = overall_sizes(size_shared, True, variants)
+        table("LLVM size optimization versus vbcc — overall code size",
+              ["Place", "Configuration", "Relative size index", "Total code + helpers (B)", "Suite passes"], ranking)
+        paragraph(str(len(eligible)) + "/" + str(len(BENCHMARKS)) +
+                  " tests included in this ranking; only passing, positive-sized results from all four configurations enter the score.")
+        for metric, title in (("code_bytes", "LLVM size optimization versus vbcc — bytes"),
+                              ("instructions", "LLVM size optimization versus vbcc — instructions")):
+            rows, highlights = [], set()
+            for name in BENCHMARKS:
+                cells, valid = [], []
+                for label in variants:
+                    row = size_shared.get((name, True, label), {})
+                    value = row.get(metric)
+                    if row.get('status') == 'PASS' and isinstance(value, int) and value > 0:
+                        cells.append(SourceLink(str(value), size_assembly_url(name)) if metric == 'code_bytes' else value)
+                        valid.append(value)
+                    else:
+                        cells.append('Excluded (FAIL)' if row.get('status') else 'Not run')
+                if len(valid) == len(variants) and len(set(valid)) > 1:
+                    highlights.update((len(rows), i + 1) for i, value in enumerate(valid) if value == min(valid))
+                rows.append([labels[name], *cells])
+            table(title, ["Benchmark", *variants], rows, highlights)
+        statuses = [[labels[name]] + [size_shared.get((name, True, label), {}).get('status', 'NOT RUN')
+                                     for label in variants] for name in BENCHMARKS]
+        table("LLVM size optimization versus vbcc — correctness", ["Benchmark", *variants], statuses)
+        paragraph("PASS requires all four seeds to match independent references. Instructions sum those four seeds and are not CPU cycles. Click a byte size for a four-way assembly comparison; failed or missing results never receive a numeric size or enter the ranking.")
     failures = []
     for report in reports:
         if report.get("suite") != "kr16":

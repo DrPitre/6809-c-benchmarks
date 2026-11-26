@@ -54,9 +54,11 @@ def gnu_vasm_harness():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--compiler', choices=('c3', 'cmoc', 'llvm', 'vbcc', 'gcc6809'), required=True)
-    parser.add_argument('--optimization', choices=('0', '2'), required=True)
+    parser.add_argument('--optimization', choices=('0', '2', 's', 'z'), required=True)
     parser.add_argument('--json', type=Path, required=True)
     args = parser.parse_args()
+    if args.optimization in ('s', 'z') and args.compiler != 'llvm':
+        parser.error('size optimization modes are supported only for LLVM')
     build = ROOT / ('build/kr16-' + args.compiler + '-O' + args.optimization)
     build.mkdir(parents=True, exist_ok=True)
     c3base = ROOT / 'build/sources/nitros9-languages/c3'
