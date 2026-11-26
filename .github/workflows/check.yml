@@ -247,6 +247,7 @@ jobs:
             build/vbcc/COMPILER-PATCH.json
             build/vbcc-compiler-build.log
             build/vbcc-os9-runtime/
+            build/cmoc-os9/
             build/sources/nitros9/recipes/picothing/l2/rel_picothing.srec
 
   matrix:

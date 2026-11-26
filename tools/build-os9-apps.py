@@ -32,6 +32,7 @@ def main():
         dirty = subprocess.check_output(['git', '-C', str(destination), 'status', '--porcelain', '--untracked-files=no'], text=True)
         if dirty:
             raise SystemExit('Source has local modifications: ' + name)
+    run(['python3', ROOT / 'tools/build-nitros9-c-libs.py'])
     toolshed = sources / 'toolshed/build/unix'
     # Build only the disk utility and its libraries; GUI tools and upstream
     # unit-test executables are not dependencies of the benchmark image.

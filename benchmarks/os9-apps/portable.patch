@@ -82,7 +82,32 @@
  }
  
  
-@@ -482,7 +486,7 @@
+@@ -262,7 +266,11 @@
+    int           c;                            /* Current character */
+    int           o;                                         /* Temp */
+    char          *spx;                 /* Save beginning of pattern */
+-   char          *cclass();                /* Compile class routine */
++#ifdef BENCH_CMOC
++   char *cclass(char *, char *);
++#else
++   char *cclass();
++#endif                /* Compile class routine */
+ 
+    s = source;
+    if (debug)
+@@ -439,7 +447,11 @@
+  */
+ {
+    register char   *l;                              /* Line pointer */
++#ifdef BENCH_CMOC
++   char *pmatch(char *, char *);
++#else
+    char *pmatch();
++#endif
+ 
+    for (l = lx = line; *l; l++) {
+       if (pmatch(l, pat))
+@@ -482,7 +494,7 @@
           break;
  
        case EOL:
@@ -91,130 +116,315 @@
              return (FALSE);
           break;
  
+--- a/ed/set.c
++++ b/ed/set.c
+@@ -9,13 +9,13 @@
+   int t_val;
+ } *t, tbl[] = {
+ 
+-  "number", &nflg, TRUE,
+-  "nonumber", &nflg, FALSE,
+-  "list", &lflg, TRUE,
+-  "nolist", &lflg, FALSE,
+-  "eightbit", &eightbit, TRUE,
+-  "noeightbit", &eightbit, FALSE,
+-  0
++  {  "number", &nflg, TRUE},
++  {  "nonumber", &nflg, FALSE},
++  {  "list", &lflg, TRUE},
++  {  "nolist", &lflg, FALSE},
++  {  "eightbit", &eightbit, TRUE},
++  {  "noeightbit", &eightbit, FALSE},
++  {0, 0, 0}
+ };
+ 
+ int set()
+--- a/ed/ed.c
++++ b/ed/ed.c
+@@ -32,7 +32,7 @@
+ int version = 1;
+ int diag = 1;
+ 
+-intr(sig)
++void intr(sig)
+ int sig;
+ {
+   printf("?\n");
+@@ -45,7 +45,10 @@
+ {
+   int stat, i, doflush;
+ 
++  /* C3 alone needs explicit initialization of its printf support. */
++#ifdef BENCH_C3
+   pflinit();
++#endif
+   set_buf();
+   doflush = isatty(1);
+ 
 --- a/ed/tools.h
 +++ b/ed/tools.h
-@@ -0,0 +1,2 @@
+@@ -1,3 +1,5 @@
 +#include <stdlib.h>
 +#include <string.h>
-@@ -98,0 +101,4 @@
+ /*      tools.h */
+ /*
+  *      #defines for non-printing ASCII characters
+@@ -96,3 +98,7 @@
+ #define min(a,b)        ((a<b)?a:b)
+ #define toupper(c)      (c>='a'&&c<='z'?c-32:c)
+ 
 +
 +TOKEN *getpat(), *makepat(), *optpat();
 +BITMAP *makebitmap();
 +char *amatch(), *matchs(), *dodash(), *catsub(), *maksub();
 --- a/ed/ed.h
 +++ b/ed/ed.h
-@@ -37,0 +38,3 @@
+@@ -35,3 +35,6 @@
+ #define nextln(l)       ((l)+1 > lastln ? 0 : (l)+1)
+ #define prevln(l)       ((l)-1 < 0 ? lastln : (l)-1)
+ 
 +
 +LINE *getptr();
 +char *getfn(), *gettxt();
---- a/ed/ed.c
-+++ b/ed/ed.c
-@@ -35 +35 @@
--intr(sig)
-+void intr(sig)
-@@ -47,0 +48,2 @@
-+  /* C3 alone needs explicit initialization of its printf support. */
-+#ifdef BENCH_C3
-@@ -48,0 +51 @@
-+#endif
 --- a/kreider/cb/cb.c
 +++ b/kreider/cb/cb.c
-@@ -32 +32 @@
+@@ -29,10 +29,10 @@
+ char *welse[2] = {"else",0};
+ char *wfor[2] = {"for",0};
+ char *wds[3] = {"case","default",0};
 -char c;
 +int c;
-@@ -34,2 +34,2 @@
+ int ct;
 -char cc;
 -char lastchar;
 +int cc;
 +int lastchar;
-@@ -45,0 +46,3 @@
+ char lchar;
+ char pchar;
+ int sind[20][10];
+@@ -43,6 +43,9 @@
+ int stabs[20][10];
+ char string[200];
+ #include <stdio.h>
 +#include <stdlib.h>
 +int getchr(), scan_for_char(), lookup(), getnl();
 +void ptabs(), flush_text(), gotelse(), comment();
-@@ -68 +71 @@
+ main(argc,argv)
+ int argc;
+ char *argv[];
+@@ -65,7 +68,7 @@
+             gotelse();
+             if (sflg == 0 || j > 0)
+                   string[j++] = c;
 -            puts();
 +            flush_text();
-@@ -78 +81 @@
+             sflg = 0;
+             break;
+          }
+@@ -75,7 +78,7 @@
+       case '\n':
+          if (eflg = lookup(welse) == 1)
+                gotelse();
 -         puts();
 +         flush_text();
-@@ -101 +104 @@
+          printf("\n");
+          sflg = 1;
+          if (eflg == 1){
+@@ -98,9 +101,9 @@
+             tabs--;
+          }
+          string[j++] = c;
 -         puts();
 +         flush_text();
-@@ -103 +106 @@
+          getnl();
 -         puts();
 +         flush_text();
-@@ -118 +121 @@
+          printf("\n");
+          tabs++;
+          sflg = 1;
+@@ -115,7 +118,7 @@
+          if ((iflev = siflev[clevel]-1) < 0)
+                iflev = 0;
+          ifflg = sifflg[clevel];
 -         puts();
 +         flush_text();
-@@ -127 +130 @@
+          tabs--;
+          ptabs();
+          if ((peek = getchr()) == ';'){
+@@ -124,7 +127,7 @@
+          }
+          else printf("%c",c);
+          getnl();
 -         puts();
 +         flush_text();
-@@ -148 +151 @@
+          printf("\n");
+          sflg = 1;
+          if (clevel < slevel[level])
+@@ -145,7 +148,7 @@
+                string[j++] = getchr();
+             }
+             if (cc == '\n'){
 -               puts();
 +               flush_text();
-@@ -160 +163 @@
+                sflg = 1;
+             }
+          }
+@@ -157,13 +160,13 @@
+          break;
+       case ';':
+          string[j++] = c;
 -         puts();
 +         flush_text();
-@@ -166 +169 @@
+          if (pflg[level] > 0 && ind[level] == 0){
+             tabs -= pflg[level];
+             pflg[level] = 0;
+          }
+          getnl();
 -         puts();
 +         flush_text();
-@@ -192 +195 @@
+          printf("\n");
+          sflg = 1;
+          if (iflev > 0)
+@@ -189,11 +192,11 @@
+          }
+          if (lookup(wds) == 0){
+             sflg = 0;
 -            puts();
 +            flush_text();
-@@ -196 +199 @@
+          }
+          else{
+             tabs--;
 -            puts();
 +            flush_text();
-@@ -204 +207 @@
+             tabs++;
+          }
+          if ((peek = getchr()) == ';'){
+@@ -201,7 +204,7 @@
+             peek = -1;
+          }
+          getnl();
 -         puts();
 +         flush_text();
-@@ -219 +222 @@
+          printf("\n");
+          sflg = 1;
+          break;
+@@ -216,7 +219,7 @@
+       case ')':
+          paren--;
+          string[j++] = c;
 -         puts();
 +         flush_text();
-@@ -237 +240 @@
+          if (getnl() == 1){
+             peek = '\n';
+             if (paren != 0)
+@@ -234,17 +237,17 @@
+             string[j++] = cc;
+          string[j++] = cc;
+          sflg = 0;
 -         puts();
 +         flush_text();
-@@ -244 +247 @@
+          sflg = 1;
+          break;
+       case '(':
+          string[j++] = c;
+          paren++;
+          if (lookup(wfor) == 1){
 -            while ((c = gets()) != ';');
 +            while ((c = scan_for_char()) != ';');
-@@ -247 +250 @@
+             ct=0;
+ cont:
 -            while ((c = gets()) != ')'){
 +            while ((c = scan_for_char()) != ')'){
-@@ -256 +259 @@
+                if (c == '(')
+                      ct++;
+             }
+@@ -253,7 +256,7 @@
+                goto cont;
+             }
+             paren--;
 -            puts();
 +            flush_text();
-@@ -266 +269 @@
+             if (getnl() == 1){
+                peek = '\n';
+                pflg[level]++;
+@@ -263,7 +266,7 @@
+             break;
+          }
+          if (lookup(wif) == 1){
 -            puts();
 +            flush_text();
-@@ -277 +280 @@
+             stabs[clevel][iflev] = tabs;
+             spflg[clevel][iflev] = pflg[level];
+             sind[clevel][iflev] = ind[level];
+@@ -274,7 +277,7 @@
+    }
+    exit (0);
+ }
 -ptabs(){
 +void ptabs(){
-@@ -289 +292 @@
+    int i;
+    for(i = 0; i < tabs; i++)
+       printf("   ");
+@@ -286,7 +289,7 @@
+    peek = -1;
+    return (lastchar);
+ }
 -puts(){
 +void flush_text(){
-@@ -330,2 +333,2 @@
+    if (j > 0){
+       if (sflg != 0){
+          ptabs();
+@@ -327,8 +330,8 @@
+    }
+    return(0);
+ }
 -gets(){
 -   char ch;
 +scan_for_char(){
 +   int ch;
-@@ -344 +347 @@
+ beg:
+    if ((ch = string[j++] = getchr()) == '\\'){
+       string[j++] = getchr();
+@@ -341,13 +344,13 @@
+       goto beg;
+    }
+    if (ch == '\n'){
 -      puts();
 +      flush_text();
-@@ -350 +353 @@
+       aflg = 1;
+       goto beg;
+    }
+    else return(ch);
+ }
 -gotelse(){
 +void gotelse(){
-@@ -377 +380 @@
+    tabs = stabs[clevel][iflev];
+    pflg[level] = spflg[clevel][iflev];
+    ind[level] = sind[clevel][iflev];
+@@ -374,11 +377,11 @@
+    }
+    return(0);
+ }
 -comment(){
 +void comment(){
-@@ -381 +384 @@
+ rep:
+    while ((c = string[j++] = getchr()) != '*')
+       if (c == '\n'){
 -         puts();
 +         flush_text();
+          sflg = 1;
+       }
+ gotstar:
 --- a/kreider/lb/lb.c
 +++ b/kreider/lb/lb.c
-@@ -13,0 +14,13 @@
+@@ -11,6 +11,19 @@
+ **   released to the public domain for non-commercial use
+ */
+ #include <stdio.h>
 +#include <stdlib.h>
 +#include <string.h>
 +/* C3 already uses native byte streams and rejects the ISO b modifier. */
-+#ifdef BENCH_C3
++#if defined(BENCH_C3) || defined(BENCH_CMOC)
 +#define BIN_READ "r"
 +#define BIN_WRITE "w"
 +#else
@@ -224,7 +434,13 @@
 +void error(), werror(), rerror(), oerror();
 +unsigned read_word();
 +void write_word();
-@@ -27,5 +40,2 @@
+ /* misc. constants */
+ #define TRUE        1
+ #define ROFSYNC     0x62CD2387
+@@ -24,11 +37,8 @@
+       *snp;                                  /* pointer to symbol */
+ int   count,
+       refcnt;
 -/*  universal 3 byte ref struct  */
 -struct refblk {
 -      char r_flag;                               /* type/location */
@@ -232,10 +448,20 @@
 -      } ref;
 +/* ROF references are exactly three file bytes, without C struct padding. */
 +char ref[3], header[28];
-@@ -65 +75 @@
+ /* rof header structure */
+ struct mhed {
+       long h_synch;
+@@ -62,14 +72,23 @@
+          fprintf(stderr,"   splits infile into ROF modules\n");
+          exit (0);
+          }
 -   if ((ifp = fopen(*++argv,"r")) == NULL)
 +   if ((ifp = fopen(*++argv,BIN_READ)) == NULL)
-@@ -71,2 +81,11 @@
+          oerror(*argv);
+    if ((lfp = fopen("modlist","w")) == NULL)
+          oerror("modlist");
+    while (TRUE)
+       {
 -      if (fread(rhp,sizeof(rofhed),1,ifp) == NULL)  /* get header */
 -            break;                              /* go check error */
 +      /* Decode the disk header explicitly; never serialize a C struct. */
@@ -249,47 +475,90 @@
 +      rhp->h_data = ((unsigned)(header[18] & 255) << 8) | (header[19] & 255);
 +      rhp->h_ddata = ((unsigned)(header[20] & 255) << 8) | (header[21] & 255);
 +      rhp->h_ocode = ((unsigned)(header[22] & 255) << 8) | (header[23] & 255);
-@@ -82 +101 @@
+       if (rhp->h_synch != ROFSYNC)          /* check for ROF file */
+             error(*argv," is not ROF");
+       mnp = modname;
+@@ -79,9 +98,9 @@
+       strcpy(fmodname,"X.");
+       strcat(fmodname,modname);
+       strcat(fmodname,".r");
 -      if ((ofp = fopen(fmodname,"w")) == NULL)   /* open "modname" */
 +      if ((ofp = fopen(fmodname,BIN_WRITE)) == NULL)   /* open "modname" */
-@@ -84 +103 @@
+             oerror(modname);
 -      if (fwrite(rhp,sizeof(rofhed),1,ofp) == NULL) /* write header */
 +      if (fwrite(header,1,28,ofp) != 28) /* write header */
-@@ -97,2 +116,2 @@
+             werror(modname);
+       fputs(modname,ofp);              /* copy modname to outfile */
+       putc('\0',ofp);
+@@ -94,18 +113,19 @@
+       putloc(*argv);                          /* write local refs */
+       fclose(ofp);
+       }
 -   if (!feof(ifp))
 -         error(*argv);
 +   if (ferror(ifp))
 +         rerror(*argv);
-@@ -100,0 +120 @@
+    fclose(ifp);
+    fclose(lfp);
 +   return 0;
-@@ -107,2 +127,2 @@
+    }
+ /*page*/
+ /* copy the globals to the new file & record in list file */
+ putglb(s)
+ char  *s;
+    {
 -   count = getw(ifp);                          /* read glob count */
 -   putw(count,ofp);                           /* write glob count */
 +   count = read_word(ifp);                          /* read glob count */
 +   write_word(count,ofp);                           /* write glob count */
-@@ -121 +141 @@
+    while (count--)
+       {
+       snp = symname;
+@@ -118,9 +138,9 @@
+       *snp = '\0';
+       fputs("        ",lfp);
+       fputs(symname,lfp);
 -      if (fread(&ref,sizeof(ref),1,ifp) == NULL)
 +      if (fread(ref,1,3,ifp) != 3)
-@@ -123 +143 @@
+             rerror(s);
 -      if (fwrite(&ref,sizeof(ref),1,ofp) == NULL)
 +      if (fwrite(ref,1,3,ofp) != 3)
-@@ -131,2 +151,2 @@
+             werror(modname);
+       }
+    }
+@@ -128,8 +148,8 @@
+ putref(s)
+ char  *s;
+    {
 -   count = getw(ifp);                          /* read glob count */
 -   putw(count,ofp);                           /* write glob count */
 +   count = read_word(ifp);                          /* read glob count */
 +   write_word(count,ofp);                           /* write glob count */
-@@ -141,2 +161,2 @@
+    while (count--)
+       {
+       snp = symname;
+@@ -138,13 +158,13 @@
+       --snp;
+       fputs(symname,ofp);
+       putc('\0',ofp);
 -      refcnt = getw(ifp);
 -      putw(refcnt,ofp);
 +      refcnt = read_word(ifp);
 +      write_word(refcnt,ofp);
-@@ -145 +165 @@
+       while (refcnt--)
+          {
 -         if (fread(&ref,sizeof(ref),1,ifp) == NULL)
 +         if (fread(ref,1,3,ifp) != 3)
-@@ -147 +167 @@
+                rerror(s);
 -         if (fwrite(&ref,sizeof(ref),1,ofp) == NULL)
 +         if (fwrite(ref,1,3,ofp) != 3)
-@@ -165,5 +185,5 @@
+                werror(modname);
+          }
+       }
+@@ -162,35 +182,52 @@
+ putloc(s)
+ char  *s;
+    {
 -   count = getw(ifp);                           /* get local refs */
 -   putw(count,ofp);                                /* to new file */
 -   while (count--)
@@ -300,7 +569,7 @@
 +   while (count--)
 +      {
 +      if (fread(ref,1,3,ifp) != 3)    /* copy a ref */
-@@ -171,5 +191,5 @@
+             rerror(s);
 -      if (fwrite(&ref,sizeof(ref),1,ofp) == NULL)
 -            werror(,modname);
 -      }
@@ -311,16 +580,28 @@
 +      }
 +   }
 +void werror(s)
-@@ -180 +200 @@
+ char  *s;
+    {
+    error("Write error on ",s);
+    }
 -rerror(s)
 +void rerror(s)
-@@ -185 +205 @@
+ char  *s;
+    {
+    error("Read error on ",s);
+    }
 -oerror(s)
 +void oerror(s)
-@@ -190 +210 @@
+ char  *s;
+    {
+    error("Can't open ",s);
+    }
 -error(s1,s2)
 +void error(s1,s2)
-@@ -195,2 +215,19 @@
+ char  *s1,  *s2;
+    {
+    fputs(s1,stdout);
+    puts(s2);
 -   exit ();
 -   }
 \ No newline at end of file
@@ -355,7 +636,18 @@
  #define TRUE 1
  #define FALSE 0
  #define LMAX 121
-@@ -30,6 +33,9 @@
+@@ -24,12 +27,19 @@
+ int  sflag=FALSE;                          /* true is suppress */
+ char tbuf[6];                              /* time read buffer */
+ char buf[LMAX];                            /* read line buffer */
+-FILE *fp, *fopen();
++#ifdef BENCH_CMOC
++FILE *fp;
++#else
++FILE *fp, *fopen();
++#endif
+ main(argc,argv)
+ int  argc;
  char *argv[];
     {
     char ch, *p;
@@ -381,54 +673,357 @@
     header(name);
     while (fgets(buf,LMAX,fp)!=NULL)
        {
---- a/uemacs/ueed.h
-+++ b/uemacs/ueed.h
-@@ -187,3 +187,16 @@
- extern  LINE    *lalloc();              /* Allocate a line              */
+--- a/uemacs/uefile1.c
++++ b/uemacs/uefile1.c
+@@ -173,8 +173,8 @@
+                 if (wp->w_bufp == curbp) {
+                         wp->w_linep = lforw(curbp->b_linep);
+                         wp->w_dotp  = lforw(curbp->b_linep);
+-                        wp->w_doto  = 
+-                        wp->w_markp = 
++                        wp->w_doto  = 0;
++                        wp->w_markp = 0;
+                         wp->w_marko = 0;
+                         wp->w_flag |= WFMODE|WFHARD;
+                 }
+--- a/uemacs/ueword.c
++++ b/uemacs/ueword.c
+@@ -19,7 +19,8 @@
+ wrapword(n)
+ int n;
+ {
+-        register int cnt, oldp;
++        register int cnt;
++        LINE *oldp;
+         oldp = curwp->w_dotp;
+         cnt = -1;
+         do {                            
+@@ -30,7 +31,7 @@
+         while (! inword());
+         if (! backword(NULL, 1))
+                 return(FALSE);
+-        if (oldp == (int) (curwp->w_dotp && curwp->w_doto)) {
++        if (oldp == curwp->w_dotp && curwp->w_doto) {
+                 if (! backdel(NULL, 1))
+                         return(FALSE);
+                 if (! newline(NULL, 1))
+--- a/uemacs/uemain.h
++++ b/uemacs/uemain.h
+@@ -36,7 +36,7 @@
  
+ typedef struct {
+   short k_code;     /* Key code      */
+-  int (*k_fp)();    /* Routine to handle it   */
++  int (*k_fp) UE_ARGS((int, int));    /* Routine to handle it   */
+ }  KEYTAB;
  
-+
-+/* Common redirected ANSI benchmark profile; no terminal ioctl negotiation. */
+ /*
+@@ -47,157 +47,157 @@
+  */
+ #ifdef MAINTABLE
+ 
+-extern      int ctrlg();                /* Abort out of things          */
+-extern      int quit();                 /* Quit                         */
+-extern      int ctlxlp();               /* Begin macro                  */
+-extern      int ctlxrp();               /* End macro                    */
+-extern     int  ctlxe();                /* Execute macro                */
+-extern     int  fileread();             /* Get a file, read only        */
+-extern     int  filevisit();            /* Get a file, read write       */
+-extern     int  filewrite();            /* Write a file                 */
+-extern     int  filesave();             /* Save current file            */
+-extern     int  filename();             /* Adjust file name             */
++extern      int ctrlg UE_ARGS((int, int));                /* Abort out of things          */
++extern      int quit UE_ARGS((int, int));                 /* Quit                         */
++extern      int ctlxlp UE_ARGS((int, int));               /* Begin macro                  */
++extern      int ctlxrp UE_ARGS((int, int));               /* End macro                    */
++extern     int  ctlxe UE_ARGS((int, int));                /* Execute macro                */
++extern     int  fileread UE_ARGS((int, int));             /* Get a file, read only        */
++extern     int  filevisit UE_ARGS((int, int));            /* Get a file, read write       */
++extern     int  filewrite UE_ARGS((int, int));            /* Write a file                 */
++extern     int  filesave UE_ARGS((int, int));             /* Save current file            */
++extern     int  filename UE_ARGS((int, int));             /* Adjust file name             */
+ extern     int  getccol();              /* Get current column           */
+-extern     int  gotobol();              /* Move to start of line        */
+-extern     int  forwchar();             /* Move forward by characters   */
+-extern     int  gotoeol();              /* Move to end of line          */
+-extern     int  backchar();             /* Move backward by characters  */
+-extern     int  forwline();             /* Move forward by lines        */
+-extern     int  backline();             /* Move backward by lines       */
+-extern     int  forwpage();             /* Move forward by pages        */
+-extern     int  backpage();             /* Move backward by pages       */
+-extern     int  gotobob();              /* Move to start of buffer      */
+-extern     int  gotoeob();              /* Move to end of buffer        */
+-extern     int  setfillcol();           /* Set fill column.             */
+-extern     int  setmark();              /* Set mark                     */
+-extern     int  swapmark();             /* Swap "." and mark            */
+-extern     int  forwsearch();           /* Search forward               */
+-extern     int  backsearch();           /* Search backwards             */
+-extern     int  showcpos();             /* Show the cursor position     */
+-#ifndef OS9
+-extern     int  nextwind();             /* Move to the next window      */
+-extern     int  prevwind();             /* Move to the previous window  */
+-extern     int  onlywind();             /* Make current window only one */
+-extern     int  splitwind();            /* Split current window         */
+-extern     int  mvdnwind();             /* Move window down             */
+-extern     int  mvupwind();             /* Move window up               */
+-extern     int  enlargewind();          /* Enlarge display window.      */
+-extern     int  shrinkwind();           /* Shrink window.               */
+-extern     int  listbuffers();          /* Display list of buffers      */
+-extern     int  usebuffer();            /* Switch a window to a buffer  */
+-extern     int  killbuffer();           /* Make a buffer go away.       */
+-#endif
+-extern     int  reposition();           /* Reposition window            */
+-extern     int  refresh();              /* Refresh the screen           */
+-extern     int  twiddle();              /* Twiddle characters           */
+-extern     int  tab();                  /* Insert tab                   */
+-extern     int  newline();              /* Insert CR-LF                 */
+-extern     int  indent();               /* Insert CR-LF, then indent    */
+-extern     int  openline();             /* Open up a blank line         */
+-extern     int  deblank();              /* Delete blank lines           */
+-extern     int  quote();                /* Insert literal               */
+-extern     int  backword();             /* Backup by words              */
+-extern     int  forwword();             /* Advance by words             */
+-extern     int  forwdel();              /* Forward delete               */
+-extern     int  backdel();              /* Backward delete              */
+-extern     int  killer();               /* Kill forward                 */
+-extern     int  yank();                 /* Yank back from killbuffer.   */
+-extern     int  upperword();            /* Upper case word.             */
+-extern     int  lowerword();            /* Lower case word.             */
+-extern     int  upperregion();          /* Upper case region.           */
+-extern     int  lowerregion();          /* Lower case region.           */
+-extern     int  capword();              /* Initial capitalize word.     */
+-extern     int  delfword();             /* Delete forward word.         */
+-extern     int  delbword();             /* Delete backward word.        */
+-extern     int  killregion();           /* Kill region.                 */
+-extern     int  copyregion();           /* Copy region to kill buffer.  */
+-extern     int  spawncli();             /* Run CLI in a subjob.         */
+-extern     int  spawn();                /* Run a command in a subjob.   */
+-extern     int  quickexit();            /* low keystroke style exit.    */
++extern     int  gotobol UE_ARGS((int, int));              /* Move to start of line        */
++extern     int  forwchar UE_ARGS((int, int));             /* Move forward by characters   */
++extern     int  gotoeol UE_ARGS((int, int));              /* Move to end of line          */
++extern     int  backchar UE_ARGS((int, int));             /* Move backward by characters  */
++extern     int  forwline UE_ARGS((int, int));             /* Move forward by lines        */
++extern     int  backline UE_ARGS((int, int));             /* Move backward by lines       */
++extern     int  forwpage UE_ARGS((int, int));             /* Move forward by pages        */
++extern     int  backpage UE_ARGS((int, int));             /* Move backward by pages       */
++extern     int  gotobob UE_ARGS((int, int));              /* Move to start of buffer      */
++extern     int  gotoeob UE_ARGS((int, int));              /* Move to end of buffer        */
++extern     int  setfillcol UE_ARGS((int, int));           /* Set fill column.             */
++extern     int  setmark UE_ARGS((int, int));              /* Set mark                     */
++extern     int  swapmark UE_ARGS((int, int));             /* Swap "." and mark            */
++extern     int  forwsearch UE_ARGS((int, int));           /* Search forward               */
++extern     int  backsearch UE_ARGS((int, int));           /* Search backwards             */
++extern     int  showcpos UE_ARGS((int, int));             /* Show the cursor position     */
 +#ifndef OS9
-+#define OS9 1
++extern     int  nextwind UE_ARGS((int, int));             /* Move to the next window      */
++extern     int  prevwind UE_ARGS((int, int));             /* Move to the previous window  */
++extern     int  onlywind UE_ARGS((int, int));             /* Make current window only one */
++extern     int  splitwind UE_ARGS((int, int));            /* Split current window         */
++extern     int  mvdnwind UE_ARGS((int, int));             /* Move window down             */
++extern     int  mvupwind UE_ARGS((int, int));             /* Move window up               */
++extern     int  enlargewind UE_ARGS((int, int));          /* Enlarge display window.      */
++extern     int  shrinkwind UE_ARGS((int, int));           /* Shrink window.               */
++extern     int  listbuffers UE_ARGS((int, int));          /* Display list of buffers      */
++extern     int  usebuffer UE_ARGS((int, int));            /* Switch a window to a buffer  */
++extern     int  killbuffer UE_ARGS((int, int));           /* Make a buffer go away.       */
 +#endif
-+#define ANSI 1
-+#define BENCH_STREAM 1
-+#include <stdlib.h>
-+#include <string.h>
-+#ifndef BENCH_C3
-+#include <stdarg.h>
-+int mlwrite(const char *, ...);
++extern     int  reposition UE_ARGS((int, int));           /* Reposition window            */
++extern     int  refresh UE_ARGS((int, int));              /* Refresh the screen           */
++extern     int  twiddle UE_ARGS((int, int));              /* Twiddle characters           */
++extern     int  tab UE_ARGS((int, int));                  /* Insert tab                   */
++extern     int  newline UE_ARGS((int, int));              /* Insert CR-LF                 */
++extern     int  indent UE_ARGS((int, int));               /* Insert CR-LF, then indent    */
++extern     int  openline UE_ARGS((int, int));             /* Open up a blank line         */
++extern     int  deblank UE_ARGS((int, int));              /* Delete blank lines           */
++extern     int  quote UE_ARGS((int, int));                /* Insert literal               */
++extern     int  backword UE_ARGS((int, int));             /* Backup by words              */
++extern     int  forwword UE_ARGS((int, int));             /* Advance by words             */
++extern     int  forwdel UE_ARGS((int, int));              /* Forward delete               */
++extern     int  backdel UE_ARGS((int, int));              /* Backward delete              */
++extern     int  killer UE_ARGS((int, int));               /* Kill forward                 */
++extern     int  yank UE_ARGS((int, int));                 /* Yank back from killbuffer.   */
++extern     int  upperword UE_ARGS((int, int));            /* Upper case word.             */
++extern     int  lowerword UE_ARGS((int, int));            /* Lower case word.             */
++extern     int  upperregion UE_ARGS((int, int));          /* Upper case region.           */
++extern     int  lowerregion UE_ARGS((int, int));          /* Lower case region.           */
++extern     int  capword UE_ARGS((int, int));              /* Initial capitalize word.     */
++extern     int  delfword UE_ARGS((int, int));             /* Delete forward word.         */
++extern     int  delbword UE_ARGS((int, int));             /* Delete backward word.        */
++extern     int  killregion UE_ARGS((int, int));           /* Kill region.                 */
++extern     int  copyregion UE_ARGS((int, int));           /* Copy region to kill buffer.  */
++extern     int  spawncli UE_ARGS((int, int));             /* Run CLI in a subjob.         */
++extern     int  spawn UE_ARGS((int, int));                /* Run a command in a subjob.   */
++extern     int  quickexit UE_ARGS((int, int));            /* low keystroke style exit.    */
+ 
+ KEYTAB keytab[] = {
+-  CTRL|'@',    setmark,
+-  CTRL|'A',    gotobol,
+-  CTRL|'B',    backchar,
+-  CTRL|'C',    spawncli,  /* Run CLI in subjob. */
+-  CTRL|'D',    forwdel,
+-  CTRL|'E',    gotoeol,
+-  CTRL|'F',    forwchar,
+-  CTRL|'G',    ctrlg,
+-  CTRL|'H',    backdel,
+-  CTRL|'I',    tab,
+-  CTRL|'J',    indent,
+-  CTRL|'K',    killer,
+-  CTRL|'L',    refresh,
+-  CTRL|'M',    newline,
+-  CTRL|'N',    forwline,
+-  CTRL|'O',    openline,
+-  CTRL|'P',    backline,
+-  CTRL|'Q',    quote,   /* Often unreachable */
+-  CTRL|'R',    backsearch,
+-  CTRL|'S',    forwsearch, /* Often unreachable */
+-  CTRL|'T',    twiddle,
+-  CTRL|'V',    forwpage,
+-  CTRL|'W',    killregion,
+-  CTRL|'Y',    yank,
+-  CTRL|'Z',    quickexit,  /* quick save and exit */
+-#ifndef OS9
+-  CTLX|CTRL|'B',   listbuffers,
+-#endif
+-  CTLX|CTRL|'C',   quit,   /* Hard quit.   */
+-  CTLX|CTRL|'F',   filename,
+-  CTLX|CTRL|'L',   lowerregion,
+-  CTLX|CTRL|'O',   deblank,
+-#ifndef OS9
+-  CTLX|CTRL|'N',   mvdnwind,
+-  CTLX|CTRL|'P',   mvupwind,
+-#endif
+-  CTLX|CTRL|'R',   fileread,
+-  CTLX|CTRL|'S',   filesave,  /* Often unreachable */
+-  CTLX|CTRL|'U',   upperregion,
+-#ifndef OS9
+-  CTLX|CTRL|'V',   filevisit,
+-#endif
+-  CTLX|CTRL|'W',   filewrite,
+-  CTLX|CTRL|'X',   swapmark,
+-#ifndef OS9
+-  CTLX|CTRL|'Z',   shrinkwind,
+-#endif
+-  CTLX|'!',    spawn,   /* Run 1 command.  */
+-  CTLX|'=',    showcpos,
+-  CTLX|'(',    ctlxlp,
+-  CTLX|')',    ctlxrp,
+-#ifndef OS9
+-  CTLX|'1',    onlywind,
+-  CTLX|'2',    splitwind,
+-  CTLX|'B',    usebuffer,
+-#endif
+-  CTLX|'E',    ctlxe,
+-  CTLX|'F',    setfillcol,
+-#ifndef OS9
+-  CTLX|'K',    killbuffer,
+-  CTLX|'N',    nextwind,
+-  CTLX|'P',    prevwind,
+-  CTLX|'Z',    enlargewind,
+-#endif
+-  META|CTRL|'H',   delbword,
+-  META|'!',    reposition,
+-  META|'.',    setmark,
+-  META|'>',    gotoeob,
+-  META|'<',    gotobob,
+-  META|'B',    backword,
+-  META|'C',    capword,
+-  META|'D',    delfword,
+-  META|'F',    forwword,
+-  META|'L',    lowerword,
+-  META|'U',    upperword,
+-  META|'V',    backpage,
+-#ifndef OS9
+-  META|'W',    copyregion,
+-#endif
+-  META|0x7F,    delbword,
+-  0x7F,     backdel,
+-  0,        0 /* Signals end of table */
++  {CTRL|'@',    setmark},
++  {CTRL|'A',    gotobol},
++  {CTRL|'B',    backchar},
++  {CTRL|'C',    spawncli},  /* Run CLI in subjob. */
++  {CTRL|'D',    forwdel},
++  {CTRL|'E',    gotoeol},
++  {CTRL|'F',    forwchar},
++  {CTRL|'G',    ctrlg},
++  {CTRL|'H',    backdel},
++  {CTRL|'I',    tab},
++  {CTRL|'J',    indent},
++  {CTRL|'K',    killer},
++  {CTRL|'L',    refresh},
++  {CTRL|'M',    newline},
++  {CTRL|'N',    forwline},
++  {CTRL|'O',    openline},
++  {CTRL|'P',    backline},
++  {CTRL|'Q',    quote},   /* Often unreachable */
++  {CTRL|'R',    backsearch},
++  {CTRL|'S',    forwsearch}, /* Often unreachable */
++  {CTRL|'T',    twiddle},
++  {CTRL|'V',    forwpage},
++  {CTRL|'W',    killregion},
++  {CTRL|'Y',    yank},
++  {CTRL|'Z',    quickexit},  /* quick save and exit */
++#ifndef OS9
++  {CTLX|CTRL|'B',   listbuffers},
 +#endif
---- a/uemacs/ueansi.c
-+++ b/uemacs/ueansi.c
-@@ -8,7 +8,7 @@
- #include        "ueed.h"
- 
- #ifdef ANSI
--#ifdef OS9
-+#if defined(OS9) && !defined(BENCH_STREAM)
- #include        <os9.h>
- #endif
- 
-@@ -87,7 +87,7 @@
-         ttputc((n%10) + '0');
- }
- 
--#ifdef OS9
-+#if defined(OS9) && !defined(BENCH_STREAM)
- #define SS_READY 0x01                   /* GetStat: is input waiting?   */
- #define SS_SCSIZ 0x26                   /* GetStat: screen size         */
- #define MAXROW  127                     /* A window's rows are a char.  */
-@@ -200,7 +200,7 @@
- #endif
-         ttopen();
- #ifdef ANSI
--#ifdef OS9
-+#if defined(OS9) && !defined(BENCH_STREAM)
-         ansisize();
- #endif
- #endif
++  {CTLX|CTRL|'C',   quit},   /* Hard quit.   */
++  {CTLX|CTRL|'F',   filename},
++  {CTLX|CTRL|'L',   lowerregion},
++  {CTLX|CTRL|'O',   deblank},
++#ifndef OS9
++  {CTLX|CTRL|'N',   mvdnwind},
++  {CTLX|CTRL|'P',   mvupwind},
++#endif
++  {CTLX|CTRL|'R',   fileread},
++  {CTLX|CTRL|'S',   filesave},  /* Often unreachable */
++  {CTLX|CTRL|'U',   upperregion},
++#ifndef OS9
++  {CTLX|CTRL|'V',   filevisit},
++#endif
++  {CTLX|CTRL|'W',   filewrite},
++  {CTLX|CTRL|'X',   swapmark},
++#ifndef OS9
++  {CTLX|CTRL|'Z',   shrinkwind},
++#endif
++  {CTLX|'!',    spawn},   /* Run 1 command.  */
++  {CTLX|'=',    showcpos},
++  {CTLX|'(',    ctlxlp},
++  {CTLX|')',    ctlxrp},
++#ifndef OS9
++  {CTLX|'1',    onlywind},
++  {CTLX|'2',    splitwind},
++  {CTLX|'B',    usebuffer},
++#endif
++  {CTLX|'E',    ctlxe},
++  {CTLX|'F',    setfillcol},
++#ifndef OS9
++  {CTLX|'K',    killbuffer},
++  {CTLX|'N',    nextwind},
++  {CTLX|'P',    prevwind},
++  {CTLX|'Z',    enlargewind},
++#endif
++  {META|CTRL|'H',   delbword},
++  {META|'!',    reposition},
++  {META|'.',    setmark},
++  {META|'>',    gotoeob},
++  {META|'<',    gotobob},
++  {META|'B',    backword},
++  {META|'C',    capword},
++  {META|'D',    delfword},
++  {META|'F',    forwword},
++  {META|'L',    lowerword},
++  {META|'U',    upperword},
++  {META|'V',    backpage},
++#ifndef OS9
++  {META|'W',    copyregion},
++#endif
++  {META|0x7F,    delbword},
++  {0x7F,     backdel},
++  {0,        0} /* Signals end of table */
+ };
+ #else
+ extern KEYTAB keytab[];
 --- a/uemacs/uemain1.c
 +++ b/uemacs/uemain1.c
 @@ -40,6 +40,7 @@
@@ -454,7 +1049,7 @@
   * on OSK despite the fact the first two arguments are passed in registers.
   * Set the "message line" flag TRUE.
   */
-+#ifdef BENCH_C3
++#if defined(BENCH_C3) || defined(BENCH_CMOC)
  mlwrite(fmt, arg)
      char *fmt;
      {
@@ -496,6 +1091,134 @@
  
  /*
   * Write out a string. Update the physical cursor position. This assumes that
+--- a/uemacs/ueed.h
++++ b/uemacs/ueed.h
+@@ -1,3 +1,8 @@
++#ifdef BENCH_CMOC
++#define UE_ARGS(args) args
++#else
++#define UE_ARGS(args) ()
++#endif
+ /*
+  * This file is the general header file for all parts of the MicroEMACS
+  * display editor. It contains definitions used by everyone, and it contains
+@@ -152,15 +157,15 @@
+ typedef struct  {
+         short   t_nrow;                 /* Number of rows.              */
+         short   t_ncol;                 /* Number of columns.           */
+-        int     (*t_open)();            /* Open terminal at the start.  */
+-        int     (*t_close)();           /* Close terminal at end.       */
+-        int     (*t_getchar)();         /* Get character from keyboard. */
+-        int     (*t_putchar)();         /* Put character to display.    */
+-        int     (*t_flush)();           /* Flush output buffers.        */
+-        int     (*t_move)();            /* Move the cursor, origin 0.   */
+-        int     (*t_eeol)();            /* Erase to end of line.        */
+-        int     (*t_eeop)();            /* Erase to end of page.        */
+-        int     (*t_beep)();            /* Beep.                        */
++        int     (*t_open) UE_ARGS((void));            /* Open terminal at the start.  */
++        int     (*t_close) UE_ARGS((void));           /* Close terminal at end.       */
++        int     (*t_getchar) UE_ARGS((void));         /* Get character from keyboard. */
++        int     (*t_putchar) UE_ARGS((int));         /* Put character to display.    */
++        int     (*t_flush) UE_ARGS((void));           /* Flush output buffers.        */
++        int     (*t_move) UE_ARGS((int, int));            /* Move the cursor, origin 0.   */
++        int     (*t_eeol) UE_ARGS((void));            /* Erase to end of line.        */
++        int     (*t_eeop) UE_ARGS((void));            /* Erase to end of page.        */
++        int     (*t_beep) UE_ARGS((void));            /* Beep.                        */
+ }       TERM;
+ 
+ extern  int     fillcol;                /* Fill column                  */
+@@ -187,3 +192,16 @@
+ extern  LINE    *lalloc();              /* Allocate a line              */
+ 
+ 
++
++/* Common redirected ANSI benchmark profile; no terminal ioctl negotiation. */
++#ifndef OS9
++#define OS9 1
++#endif
++#define ANSI 1
++#define BENCH_STREAM 1
++#include <stdlib.h>
++#include <string.h>
++#if !defined(BENCH_C3) && !defined(BENCH_CMOC)
++#include <stdarg.h>
++int mlwrite(const char *, ...);
++#endif
+--- a/uemacs/ueansi.c
++++ b/uemacs/ueansi.c
+@@ -8,7 +8,7 @@
+ #include        "ueed.h"
+ 
+ #ifdef ANSI
+-#ifdef OS9
++#if defined(OS9) && !defined(BENCH_STREAM)
+ #include        <os9.h>
+ #endif
+ 
+@@ -17,16 +17,16 @@
+ #define BEL     0x07                    /* BEL character.               */
+ #define ESC     0x1B                    /* ESC character.               */
+ 
+-extern  int     ttopen();               /* Forward references.          */
+-extern  int     ttgetc();
+-extern  int     ttputc();
+-extern  int     ttflush();
+-extern  int     ttclose();
+-extern  int     ansimove();
+-extern  int     ansieeol();
+-extern  int     ansieeop();
+-extern  int     ansibeep();
+-extern  int     ansiopen();
++extern  int     ttopen UE_ARGS((void));               /* Forward references.          */
++extern  int     ttgetc UE_ARGS((void));
++extern  int     ttputc UE_ARGS((int));
++extern  int     ttflush UE_ARGS((void));
++extern  int     ttclose UE_ARGS((void));
++extern  int     ansimove UE_ARGS((int, int));
++extern  int     ansieeol UE_ARGS((void));
++extern  int     ansieeop UE_ARGS((void));
++extern  int     ansibeep UE_ARGS((void));
++extern  int     ansiopen UE_ARGS((void));
+ 
+ /*
+  * Standard terminal interface dispatch table. Most of the fields point into
+@@ -87,7 +87,7 @@
+         ttputc((n%10) + '0');
+ }
+ 
+-#ifdef OS9
++#if defined(OS9) && !defined(BENCH_STREAM)
+ #define SS_READY 0x01                   /* GetStat: is input waiting?   */
+ #define SS_SCSIZ 0x26                   /* GetStat: screen size         */
+ #define MAXROW  127                     /* A window's rows are a char.  */
+@@ -200,7 +200,7 @@
+ #endif
+         ttopen();
+ #ifdef ANSI
+-#ifdef OS9
++#if defined(OS9) && !defined(BENCH_STREAM)
+         ansisize();
+ #endif
+ #endif
+--- a/uemacs/uemain4.c
++++ b/uemacs/uemain4.c
+@@ -50,11 +50,11 @@
+         bp->b_nwnd  = 1;                        /* Displayed.           */
+         wp->w_linep = bp->b_linep;
+         wp->w_dotp  = bp->b_linep;
+-        wp->w_wndp  =                      /* Initialize window    */
+-        wp->w_doto  = 
+-        wp->w_markp = 
+-        wp->w_marko = 
+-        wp->w_toprow = 
++        wp->w_wndp  = 0;                      /* Initialize window    */
++        wp->w_doto  = 0;
++        wp->w_markp = 0;
++        wp->w_marko = 0;
++        wp->w_toprow = 0;
+         wp->w_force = 0;
+         wp->w_ntrows = term.t_nrow-1;           /* "-1" for mode line.  */
+         wp->w_flag  = WFMODE|WFHARD;            /* Full.                */
 --- a/uemacs/uebuffer2.c
 +++ b/uemacs/uebuffer2.c
 @@ -111,9 +111,9 @@
@@ -522,38 +1245,6 @@
          bp->b_marko = 0;
          return (TRUE);
  }
---- a/uemacs/uefile1.c
-+++ b/uemacs/uefile1.c
-@@ -173,8 +173,8 @@
-                 if (wp->w_bufp == curbp) {
-                         wp->w_linep = lforw(curbp->b_linep);
-                         wp->w_dotp  = lforw(curbp->b_linep);
--                        wp->w_doto  = 
--                        wp->w_markp = 
-+                        wp->w_doto  = 0;
-+                        wp->w_markp = 0;
-                         wp->w_marko = 0;
-                         wp->w_flag |= WFMODE|WFHARD;
-                 }
---- a/uemacs/uemain4.c
-+++ b/uemacs/uemain4.c
-@@ -50,11 +50,11 @@
-         bp->b_nwnd  = 1;                        /* Displayed.           */
-         wp->w_linep = bp->b_linep;
-         wp->w_dotp  = bp->b_linep;
--        wp->w_wndp  =                      /* Initialize window    */
--        wp->w_doto  = 
--        wp->w_markp = 
--        wp->w_marko = 
--        wp->w_toprow = 
-+        wp->w_wndp  = 0;                      /* Initialize window    */
-+        wp->w_doto  = 0;
-+        wp->w_markp = 0;
-+        wp->w_marko = 0;
-+        wp->w_toprow = 0;
-         wp->w_force = 0;
-         wp->w_ntrows = term.t_nrow-1;           /* "-1" for mode line.  */
-         wp->w_flag  = WFMODE|WFHARD;            /* Full.                */
 --- a/uemacs/uedisplay1.c
 +++ b/uemacs/uedisplay1.c
 @@ -48,12 +48,16 @@
@@ -582,24 +1273,19 @@
  
      nbflag = FALSE;
      cp3 = &vline[term.t_ncol];          /* Compute right match. */
---- a/uemacs/ueword.c
-+++ b/uemacs/ueword.c
-@@ -19,7 +19,8 @@
- wrapword(n)
- int n;
- {
--        register int cnt, oldp;
-+        register int cnt;
-+        LINE *oldp;
-         oldp = curwp->w_dotp;
-         cnt = -1;
-         do {                            
-@@ -30,7 +31,7 @@
-         while (! inword());
-         if (! backword(NULL, 1))
-                 return(FALSE);
--        if (oldp == (int) (curwp->w_dotp && curwp->w_doto)) {
-+        if (oldp == curwp->w_dotp && curwp->w_doto) {
-                 if (! backdel(NULL, 1))
-                         return(FALSE);
-                 if (! newline(NULL, 1))
+--- a/kreider/lb/lb.c
++++ b/kreider/lb/lb.c
+@@ -38,7 +38,12 @@
+ int   count,
+       refcnt;
+ /* ROF references are exactly three file bytes, without C struct padding. */
+-char ref[3], header[28];
++char ref[3];
++#ifdef BENCH_CMOC
++unsigned char header[28];
++#else
++char header[28];
++#endif
+ /* rof header structure */
+ struct mhed {
+       long h_synch;

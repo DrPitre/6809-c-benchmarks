@@ -14,5 +14,9 @@
   "video": {
     "url": "https://github.com/markrvmurray/pico-thing-video.git",
     "revision": "80ef18ec0ade49779967551b3fe2389197a2946c"
+  },
+  "c_libs": {
+    "url": "https://github.com/nitros9project/nitros9-c-libs.git",
+    "revision": "566bb64d5dd58b29cf53ea44c8684037f32ed083"
   }
 }
