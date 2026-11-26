@@ -1,0 +1,2 @@
+# Unified patches retain whitespace from the upstream source payload.
+benchmarks/os9-apps/portable.patch -whitespace

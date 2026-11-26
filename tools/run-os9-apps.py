@@ -17,7 +17,8 @@ CONFIGURATIONS = [('c300', 'C3 optimizer off', 'c3', '0'),
                   ('vb00', 'VBCC -O0', 'vbcc', '0'), ('vb02', 'VBCC -O2', 'vbcc', '2')]
 APPLICATIONS = {'uniq': ('kreider/uniq/uniq.c', 'uq'), 'dgrep': ('kreider/dgrep/grep.c', 'dg'), 'ed': ('ed/ed.c', 'ed'),
                 'cb': ('kreider/cb/cb.c', 'cb'), 'lb': ('kreider/lb/lb.c', 'lb'),
-                'ppc': ('kreider/ppc/ppc.c', 'pp')}
+                'ppc': ('kreider/ppc/ppc.c', 'pp'),
+                'uemacs': ('uemacs/uemain1.c', 'um')}
 
 
 def digest(path):
@@ -76,9 +77,23 @@ def normalize(data):
     return data.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
 
 
+def output_matches(case, actual):
+    if actual is None:
+        return False
+    if case['expected'] is not None:
+        return actual == case['expected']
+    # Terminal transcripts differ from line-oriented stdout. Require explicit
+    # message assertions plus exact saved-file checks, never a wildcard pass.
+    return (bool(case['output_contains']) and bool(case['files'])
+            and all(text in actual for text in case['output_contains'])
+            and 'UEMACS SCRIPT EXHAUSTED' not in actual
+            and not any(ord(c) >= 128 or c in '\0\a' for c in actual))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--json', type=Path, required=True)
+    parser.add_argument('--application', action='append', choices=APPLICATIONS, help='Limit local checks to named applications')
     parser.add_argument('--configuration', action='append', help='Limit to named config IDs for local checks')
     parser.add_argument('--runtime-probe', type=Path, default=ROOT / 'build/sources/picolibc/test/test-stdio/test-os9-text.c')
     parser.add_argument('--wall-seconds', type=int, default=180)
@@ -153,17 +168,22 @@ def main():
                 shutil.copyfile(source, destination / source.name)
     run(['patch', '--batch', '-p1', '-i', str(ROOT / 'benchmarks/os9-apps/portable.patch')], source_copy)
     shutil.copyfile(ROOT / 'benchmarks/os9-apps/ppc-clock.c', source_copy / 'kreider/ppc/ppc-clock.c')
+    shutil.copyfile(ROOT / 'benchmarks/os9-apps/uemacs-stream.c', source_copy / 'uemacs/uemacs-stream.c')
+    report['uemacs_terminal'] = 'Redirected ANSI 80x24; raw scripted input; no terminal negotiation'
     report['ppc_clock'] = {'timestamp': '2026-11-26 13:45:06',
                            'source_sha256': digest(ROOT / 'benchmarks/os9-apps/ppc-clock.c')}
     pending = []
+    applications = {name: value for name, value in APPLICATIONS.items()
+                    if not args.application or name in args.application}
     for config, label, compiler, optimization in selected:
-        for app, (relative, prefix) in APPLICATIONS.items():
+        for app, (relative, prefix) in applications.items():
             folder = work / config / app
             folder.mkdir(parents=True, exist_ok=True)
             for source in (source_copy / Path(relative).parent).iterdir():
                 shutil.copyfile(source, folder / source.name)
-            source_names = sorted(p.name for p in folder.glob('*.c'))
-            prepared = {p.name: digest(p) for p in sorted(folder.iterdir()) if p.suffix in ('.c', '.h')}
+            source_names = sorted(p.name for p in folder.glob('*.c')
+                                  if app != 'uemacs' or p.name not in ('uetermio.c', 'uecoco.c', 'uevt52.c', 'uetcap.c'))
+            prepared = {p.name: digest(p) for p in sorted(folder.iterdir()) if p.suffix in ('.c', '.h') and (p.suffix == '.h' or p.name in source_names)}
             name = prefix + config  # Six characters for every configuration: equal name overhead.
             row = {'application': app, 'configuration': label, 'configuration_id': config,
                    'benchmark': app, 'status': 'FAIL', 'stage': 'build', 'cases': [],
@@ -173,7 +193,7 @@ def main():
             (folder / name).unlink(missing_ok=True)
             try:
                 if compiler == 'c3':
-                    run(['c3', '-y', '-q', *(['-dBENCH_C3'] if app in ('ed', 'lb', 'ppc') else []), *source_names, *(['-o'] if optimization == '0' else []), '-f=' + name], folder)
+                    run(['c3', '-y', '-q', *(['-dBENCH_C3'] if app in ('ed', 'lb', 'ppc', 'uemacs') else []), *source_names, *(['-o'] if optimization == '0' else []), '-f=' + name], folder)
                 elif compiler == 'llvm':
                     run([str(llvm), '-mcpu=mc6809', '-std=gnu89', '-Wno-implicit-int',
                          '-Wno-implicit-function-declaration', '-Wno-deprecated-non-prototype',
@@ -247,7 +267,7 @@ def main():
             if directory:
                 startup.append('chd /dd/bench')
             row['cases'].append({'id': case['id'], 'output_file': directory + output_name,
-                                 'expected': case['output'], 'files': file_checks, 'status': 'NOT RUN'})
+                                 'expected': case.get('output'), 'output_contains': case.get('output_contains', []), 'files': file_checks, 'status': 'NOT RUN'})
     report['vbcc_pointer_probes'] = []
     for config, optimization in (('vb00', '0'), ('vb02', '2')):
         folder = work / ('pointer-' + config)
@@ -306,7 +326,7 @@ def main():
         console = normalize(log.read_bytes().replace(b'\0', b''))
         segment = console.split(marker, 1)[-1].split(b'POINTEREND', 1)[0]
         if (ready and marker in console and result.returncode == 0 and raw == b'ARRAY-OFFSET PASS\r'
-                and not re.search(rb'(?i)(error\s*#|WHAT\?)', segment)):
+                and not re.search(rb'(?i)(error\s*#|WHAT\?|UEMACS SCRIPT EXHAUSTED)', segment)):
             item['status'] = 'PASS'
         print('VBCC array-offset regression', item['configuration_id'], item['status'], flush=True)
     for name in ('rtout', 'rterr'):
@@ -316,7 +336,7 @@ def main():
         raw = destination.read_bytes() if destination.exists() else b''
         report['runtime_probe'][name] = raw.decode('ascii', errors='replace')
     runtime_console = normalize(log.read_bytes().replace(b'\0', b'')).split(b'RUNTIMEBEGIN\n', 1)[-1].split(b'RUNTIMEEND\n', 1)[0]
-    if ready and not re.search(rb'(?i)(error\s*#|WHAT\?)', runtime_console) and report['runtime_probe']['rtout'] == 'OS9TEXT PASS\r' and report['runtime_probe']['rterr'] == 'OS9TEXT STDERR\r':
+    if ready and not re.search(rb'(?i)(error\s*#|WHAT\?|UEMACS SCRIPT EXHAUSTED)', runtime_console) and report['runtime_probe']['rtout'] == 'OS9TEXT PASS\r' and report['runtime_probe']['rterr'] == 'OS9TEXT STDERR\r':
         report['runtime_probe']['status'] = 'PASS'
     print('OS-9 text/binary runtime regression', report['runtime_probe']['status'], flush=True)
     console = normalize(log.read_bytes().replace(b'\0', b''))
@@ -347,16 +367,16 @@ def main():
                                  if fixture['app'] == row['application'] and fixture['id'] == case['id'])
             marker = ('CASE' + row['configuration_id'] + str(fixture_index) + '\n').encode()
             segment = console.split(marker, 1)[-1].split(b'CASE', 1)[0].split(b'APPDONE', 1)[0]
-            executed = marker in console and not re.search(rb'(?i)(error\s*#|WHAT\?)', segment)
+            executed = marker in console and not re.search(rb'(?i)(error\s*#|WHAT\?|UEMACS SCRIPT EXHAUSTED)', segment)
             case['execution_completed'] = ready and executed
-            case['status'] = 'PASS' if ready and executed and result.returncode == 0 and actual == case['expected'] and all(f['status'] == 'PASS' for f in case.get('files', [])) else 'FAIL'
+            case['status'] = 'PASS' if ready and executed and result.returncode == 0 and output_matches(case, actual) and all(f['status'] == 'PASS' for f in case.get('files', [])) else 'FAIL'
         row['status'] = 'PASS' if row['cases'] and all(c['status'] == 'PASS' for c in row['cases']) else 'FAIL'
         if row['status'] != 'PASS':
             row['error'] = 'OS-9 execution did not complete or fixture output mismatch'
         print(row['configuration'], row['application'], row['status'], flush=True)
     args.json.parent.mkdir(parents=True, exist_ok=True)
     args.json.write_text(json.dumps(report, indent=2) + '\n')
-    return 0 if report_passes(report, len(selected) * len(APPLICATIONS)) else 1
+    return 0 if report_passes(report, len(selected) * len(applications)) else 1
 
 
 if __name__ == '__main__':

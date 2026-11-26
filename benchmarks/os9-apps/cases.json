@@ -536,5 +536,157 @@
       }
     },
     "output": "\n\nsample                                      11/26/26  13:45:06       Page   1\n\n  1= /*page*/\n  2=/*page*/ trailing\n  3=/*print*/ trailing\n\f"
+  },
+  {
+    "id": "insert-save",
+    "app": "uemacs",
+    "args": [],
+    "isolated": true,
+    "input": "alpha\nbeta\n\u0018\u0017saved\n\u0018\u0003",
+    "output_contains": [
+      "[Wrote 2 lines]"
+    ],
+    "output_files": {
+      "RESULT": {
+        "path": "saved",
+        "text": "alpha\nbeta\n"
+      }
+    }
+  },
+  {
+    "id": "read-edit",
+    "app": "uemacs",
+    "args": [
+      "@SOURCE@"
+    ],
+    "isolated": true,
+    "input": "\u0005!\u0018\u0017saved\n\u0018\u0003",
+    "output_contains": [
+      "[Wrote 2 lines]"
+    ],
+    "output_files": {
+      "RESULT": {
+        "path": "saved",
+        "text": "alpha!\nbeta\n"
+      }
+    },
+    "files": {
+      "SOURCE": {
+        "path": "source",
+        "text": "alpha\nbeta\n"
+      }
+    }
+  },
+  {
+    "id": "delete-join",
+    "app": "uemacs",
+    "args": [],
+    "isolated": true,
+    "input": "one\ntwo\u001b<\u0005\u0004\u0018\u0017saved\n\u0018\u0003",
+    "output_contains": [
+      "[Wrote 1 line]"
+    ],
+    "output_files": {
+      "RESULT": {
+        "path": "saved",
+        "text": "onetwo\n"
+      }
+    }
+  },
+  {
+    "id": "kill-yank",
+    "app": "uemacs",
+    "args": [],
+    "isolated": true,
+    "input": "alpha\nbeta\n\u001b<\u000b\u0005\u0019\u0018\u0017saved\n\u0018\u0003",
+    "output_contains": [
+      "[Wrote 2 lines]"
+    ],
+    "output_files": {
+      "RESULT": {
+        "path": "saved",
+        "text": "alpha\nbeta\n"
+      }
+    }
+  },
+  {
+    "id": "word-case",
+    "app": "uemacs",
+    "args": [],
+    "isolated": true,
+    "input": "alpha beta\u001b<\u001bu\u0018\u0017saved\n\u0018\u0003",
+    "output_contains": [
+      "[Wrote 1 line]"
+    ],
+    "output_files": {
+      "RESULT": {
+        "path": "saved",
+        "text": "ALPHA beta\n"
+      }
+    }
+  },
+  {
+    "id": "search-insert",
+    "app": "uemacs",
+    "args": [],
+    "isolated": true,
+    "input": "alpha beta\u001b<\u0013beta\n!\u0018\u0017saved\n\u0018\u0003",
+    "output_contains": [
+      "[Wrote 1 line]"
+    ],
+    "output_files": {
+      "RESULT": {
+        "path": "saved",
+        "text": "alpha beta!\n"
+      }
+    }
+  },
+  {
+    "id": "region-kill",
+    "app": "uemacs",
+    "args": [],
+    "isolated": true,
+    "input": "abcXYZ\u0001\u0006\u0006\u0006\u0000\u0005\u0017\u0018\u0017saved\n\u0018\u0003",
+    "output_contains": [
+      "[Wrote 1 line]"
+    ],
+    "output_files": {
+      "RESULT": {
+        "path": "saved",
+        "text": "abc\n"
+      }
+    }
+  },
+  {
+    "id": "keyboard-macro",
+    "app": "uemacs",
+    "args": [],
+    "isolated": true,
+    "input": "\u0018(xy\u0018)\u0018e\u0018\u0017saved\n\u0018\u0003",
+    "output_contains": [
+      "[Wrote 1 line]"
+    ],
+    "output_files": {
+      "RESULT": {
+        "path": "saved",
+        "text": "xyxy\n"
+      }
+    }
+  },
+  {
+    "id": "word-wrap",
+    "app": "uemacs",
+    "args": [],
+    "isolated": true,
+    "input": "\u00155\u0018fone two \u0018\u0017saved\n\u0018\u0003",
+    "output_contains": [
+      "[Wrote 2 lines]"
+    ],
+    "output_files": {
+      "RESULT": {
+        "path": "saved",
+        "text": "one\ntwo \n"
+      }
+    }
   }
 ]
