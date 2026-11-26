@@ -1,0 +1,39 @@
+To: Volker Barthelmann <vb@compilers.de>
+Subject: vbcc frontend fix: one-past array offset truncation (6809 ed failure)
+
+Hi Volker,
+
+I found a pointer-offset miscompilation while adding the OS-9 ed editor to
+our 6809 compiler bakeoff, using your 6809 Release 1 Preview from 2026-01-25.
+
+A small reproducer is:
+
+    extern int sink(char *);
+    int probe(void) {
+        char buf[256];
+        return sink(buf + 256);
+    }
+
+At both -O=0 and -O=1023, the argument points to buf rather than its valid
+one-past address. For example, the O0 output uses LEAX ,S where LEAX 256,S
+is required. In ed this makes the substitution output-buffer limit equal
+to the buffer start, so substitution fails with '?'.
+
+The cause is best_addi2pt() in type_expr.c. Its width checks allow an array
+extent of MAX+1, but forming the one-past pointer requires representing the
+extent itself. The attached patch changes those comparisons to MAX for
+all six candidate offset types. It keeps the optimization for extents
+whose one-past offsets fit.
+
+I have attached the patch and a two-translation-unit C89 regression. The
+separate checker measures the actual pointer distances. On 6809 NitrOS-9
+Level 2 under Pico-Thing USIM, the original preview fails four of the twelve
+cases at both settings; the patched compiler passes all twelve at both
+settings. It also fixes ed's substitution and save/read-back cases, and all
+320 application fixtures now pass locally.
+
+The README has source checksums and build instructions. Would you consider
+including this frontend boundary fix?
+
+Thanks,
+Boisy

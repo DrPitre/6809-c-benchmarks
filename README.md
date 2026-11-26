@@ -318,8 +318,9 @@ uses the merged upstream revision directly, without a local compiler patch.
 ## vbcc 6809
 
 The [author's 6809 Release 1 Preview dated 2026-01-25](http://www.compilers.de/vbcc6809_20260125.zip)
-is pinned by SHA-256 in `tools/install-vbcc.sh`. GitHub Actions installs the
-bundled Linux x86_64 compiler, vasm, vlink, and runtime library. The archive's
+is pinned by SHA-256 in `tools/install-vbcc.sh`. GitHub Actions rebuilds
+the compiler from the bundled source with the array-offset fix, and uses the
+bundled Linux x86_64 vasm, vlink and runtime library. The archive's
 vbcc manual contains the upstream license terms; toolchains are downloaded
 at build time rather than vendored into this repository.
 
@@ -539,14 +540,18 @@ the newline retained by fgets. Inputs use native CR line endings. Output checks
 normalize line endings only and preserve all other bytes. Fixtures cover short,
 terminated ASCII lines; long lines and unterminated input are outside this suite.
 
-C3 and LLVM RC2 with the pinned OS-9 runtime fix pass every fixture. vbcc
-passes uniq/dgrep and six of eight ed cases. The pinned preview drops a 256-byte
-automatic-array pointer offset, breaking ed substitution. Its two failing ed
-rows stay FAIL and receive no size result; see `benchmarks/os9-apps/vbcc-ed-offset.c`.
-CI opts into accepting only the exact recorded output/file failures with
-`--allow-vbcc-ed-offset-bug`. Other output differences, failed builds, failed
-runtime probes or failing fixtures still fail the job. The runner is strict
-without this flag.
+C3, LLVM and the source-built patched vbcc pass all 320 application fixtures.
+vbcc's frontend previously narrowed the one-past offset for a 256-byte array
+to an 8-bit value. `patches/vbcc-array-offset/fix.patch` corrects the boundary
+checks for all candidate offset types. `tools/build-vbcc-compiler.py` verifies
+the bundled compiler source archive, applies the patch and builds vbcchc12.
+The installer retains the pinned assembler/linker/libraries, and records source,
+patch, compiler and build-command fingerprints in `build/vbcc/COMPILER-PATCH.json`.
+Two separately compiled regression translation units test pointer values at
+both optimization levels, including 255/256/257-byte boundaries, short arrays,
+static storage and arithmetic from the one-past address. There is no known-failure
+allowance: every application and runtime regression must pass.
+
 The LLVM compiler remains the released RC2 binary. `tools/llvm-os9-runtime.json`
 pins the picolibc source fix; `tools/install-llvm.sh` rebuilds its default 6809
 integer OS-9 C library with Meson 1.11.2. Other bundled targets and variants
@@ -601,6 +606,16 @@ The pinned vbcc OS-9 read wrapper returns -1 for native E$EOF (211), causing
 stdio to flag normal EOF as an I/O error. `tools/vbcc-os9-rw.patch` changes
 that case to return zero bytes. The installer assembles an explicit runtime
 object, linked before libos9, and records source/patch/object fingerprints in
-`build/vbcc/OS9-RUNTIME.json`. Other error behavior and the compiler itself
-are unchanged. This EOF fix is independent of the existing ed code-generation
-bug, whose exact failures remain visible and excluded.
+`build/vbcc/OS9-RUNTIME.json`. Other I/O error behavior is unchanged. The separate compiler array-offset fix
+above resolves the ed failures exposed by this comparison.
+
+The email-ready compiler patch and regression sources are in
+`patches/vbcc-array-offset/`. Apply `fix.patch` at the root of the extracted
+vbcc source tree (`patch -p1 < fix.patch`), then rebuild normally. `email.txt`
+is a draft for the author; no email is sent by the benchmark tools. The fix
+changes the common frontend's offset-width boundary checks and leaves array
+index optimization enabled when the one-past offset fits. The regression
+runs as two separate translation units at O0/O1023 so the checker sees actual
+pointer values, not a compiler-folded comparison. The unpatched preview
+reports four failing checks at each setting; the patched compiler passes all
+twelve checks and all ed substitution/save/read-back fixtures.

@@ -3,7 +3,7 @@
  * vbcchc12 -cpu=6809 -pcrel -drel -O=0 vbcc-ed-offset.c -o=offset.s
  * The same issue occurs with -O=1023.
  *
- * The argument must point one past the 256-byte array. The preview emits
+ * The argument must point one past the 256-byte array. The unpatched preview emits
  * LEAX ,S instead, passing the start of the array. ed's subst.c uses this
  * expression for its output-buffer limit, so substitution returns an error.
  */

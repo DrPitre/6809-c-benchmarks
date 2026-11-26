@@ -51,30 +51,15 @@ def module_info(path, expected_name):
             'module_sha256': digest(path), 'module_name': name}
 
 
-def known_vbcc_ed_offset_failure(row):
-    """Recognize only the captured substitution failure in the pinned preview.
-
-    Keep the row FAIL and its sizes excluded. CI can opt in to accepting this
-    exact result while treating different output, failed builds, and any other
-    failing fixture as a new failure.
-    """
-    if row.get('application') != 'ed' or row.get('configuration_id') not in ('vb00', 'vb02'):
-        return False
-    if row.get('stage') != 'execution' or len(row.get('cases', [])) != 8:
-        return False
-    failed = {c['id']: c for c in row['cases'] if c['status'] != 'PASS'}
-    if set(failed) != {'substitute', 'save-reopen'}:
-        return False
-    if any(not c.get('execution_completed') or not c.get('copied') for c in failed.values()):
-        return False
-    if failed['substitute'].get('actual') != '?\nalpha alpha\nbeta\n':
-        return False
-    saved = failed['save-reopen']
-    return (saved.get('actual') == '?\nalpha\nbeta\n'
-            and len(saved.get('files', [])) == 1
-            and saved['files'][0].get('id') == 'RESULT'
-            and saved['files'][0].get('copied') is True
-            and saved['files'][0].get('actual') == 'alpha\rbeta\r')
+def report_passes(report, expected_rows):
+    pointers = report.get('vbcc_pointer_probes', [])
+    return (report.get('reached_completion') is True
+            and report.get('runtime_probe', {}).get('status') == 'PASS'
+            and len(pointers) == 2
+            and {p['configuration_id'] for p in pointers} == {'vb00', 'vb02'}
+            and all(p['status'] == 'PASS' for p in pointers)
+            and len(report['rows']) == expected_rows
+            and all(r['status'] == 'PASS' for r in report['rows']))
 
 
 def fixture_bytes(value):
@@ -94,8 +79,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--json', type=Path, required=True)
     parser.add_argument('--configuration', action='append', help='Limit to named config IDs for local checks')
-    parser.add_argument('--allow-vbcc-ed-offset-bug', action='store_true',
-                        help='Accept only the documented vbcc ed substitution failure in CI; rows stay FAIL')
     parser.add_argument('--runtime-probe', type=Path, default=ROOT / 'build/sources/picolibc/test/test-stdio/test-os9-text.c')
     parser.add_argument('--wall-seconds', type=int, default=180)
     args = parser.parse_args()
@@ -123,9 +106,13 @@ def main():
               'compiler_versions': {'C3': (ROOT / 'tools/c3-revision.txt').read_text().strip(),
                                     'LLVM': (ROOT / 'build/llvm/VERSION').read_text().strip(),
                                     'VBCC': '6809 Release 1 Preview 2026-01-25; archive SHA-256 18db043d4d4c8b0a16d4fa4b813616f277fcfb3667be0eda2334a8b8b024917e'},
+              'vbcc_compiler_patch': json.loads((vbcc / 'COMPILER-PATCH.json').read_text()),
               'vbcc_os9_runtime': json.loads((vbcc / 'OS9-RUNTIME.json').read_text()),
               'llvm_runtime': json.loads((ROOT / 'build/llvm/OS9-RUNTIME.json').read_text()),
               'rows': [], 'commands': []}
+
+    if digest(vbcc / 'bin/vbcchc12') != report['vbcc_compiler_patch']['compiler_sha256']:
+        raise ValueError('VBCC compiler does not match the source-build manifest')
 
     def run(command, cwd=work, check=True):
         report['commands'].append(command)
@@ -135,6 +122,20 @@ def main():
         if check:
             result.check_returncode()
         return result
+
+    def build_vbcc(folder, source_names, name, optimization):
+        objects = []
+        for source_name in source_names:
+            stem = Path(source_name).stem
+            run([str(vbcc / 'bin/vbcchc12'), '-cpu=6809', '-pcrel', '-drel',
+                 '-I' + str(vbcc / 'targets/6809-os9/include'), '-O=' + ('0' if optimization == '0' else '1023'),
+                 source_name, '-o=' + stem + '.s'], folder)
+            run([str(vbcc / 'bin/vasm6809_std'), '-quiet', '-Fvobj', '-nowarn=62', '-opt-branch', '-opt-offset',
+                 stem + '.s', '-o', stem + '.o'], folder)
+            objects.append(stem + '.o')
+        run([str(vbcc / 'bin/vlink'), '-bos9-6809', '-L' + str(vbcc / 'targets/6809-os9/lib'),
+             str(vbcc / 'targets/6809-os9/lib/startup.o'),
+             str(vbcc / 'targets/6809-os9/lib/bench-rw.o'), *objects, '-o', name, '-lvc', '-los9'], folder)
 
     (work / 'commands.log').write_text('')
     cases = json.loads((ROOT / 'benchmarks/os9-apps/cases.json').read_text())
@@ -174,18 +175,7 @@ def main():
                          '-Wno-implicit-function-declaration', '-Wno-deprecated-non-prototype',
                          '-O' + optimization, '-Wl,-Map=' + name + '.map', *source_names, '-o', name], folder)
                 else:
-                    objects = []
-                    for source_name in source_names:
-                        stem = Path(source_name).stem
-                        run([str(vbcc / 'bin/vbcchc12'), '-cpu=6809', '-pcrel', '-drel',
-                             '-I' + str(vbcc / 'targets/6809-os9/include'), '-O=' + ('0' if optimization == '0' else '1023'),
-                             source_name, '-o=' + stem + '.s'], folder)
-                        run([str(vbcc / 'bin/vasm6809_std'), '-quiet', '-Fvobj', '-nowarn=62', '-opt-branch', '-opt-offset',
-                             stem + '.s', '-o', stem + '.o'], folder)
-                        objects.append(stem + '.o')
-                    run([str(vbcc / 'bin/vlink'), '-bos9-6809', '-L' + str(vbcc / 'targets/6809-os9/lib'),
-                         str(vbcc / 'targets/6809-os9/lib/startup.o'),
-                         str(vbcc / 'targets/6809-os9/lib/bench-rw.o'), *objects, '-o', name, '-lvc', '-los9'], folder)
+                    build_vbcc(folder, source_names, name, optimization)
                 row.update(module_info(folder / name, name))
                 row['stage'] = 'execution'
                 pending.append((row, folder / name))
@@ -251,6 +241,22 @@ def main():
                 startup.append('chd /dd/bench')
             row['cases'].append({'id': case['id'], 'output_file': directory + output_name,
                                  'expected': case['output'], 'files': file_checks, 'status': 'NOT RUN'})
+    report['vbcc_pointer_probes'] = []
+    for config, optimization in (('vb00', '0'), ('vb02', '2')):
+        folder = work / ('pointer-' + config)
+        folder.mkdir(exist_ok=True)
+        names = ['array-offset.c', 'offset-check.c']
+        for source in names:
+            shutil.copyfile(ROOT / 'patches/vbcc-array-offset' / source, folder / source)
+        name = 'ar' + config
+        build_vbcc(folder, names, name, optimization)
+        item = {'configuration_id': config, 'status': 'FAIL', 'output_file': name + '.out',
+                'sources_sha256': {n: digest(folder / n) for n in names},
+                **module_info(folder / name, name)}
+        report['vbcc_pointer_probes'].append(item)
+        run([os9, 'copy', '-r', str(folder / name), str(disk) + ',BENCH/CMDS/' + name])
+        run([os9, 'attr', '-q', '-e', '-pe', '-pr', str(disk) + ',BENCH/CMDS/' + name])
+        startup.extend(['echo POINTER' + config, name + ' >' + item['output_file'], 'echo POINTEREND'])
     probe = work / 'iotest'
     run([str(llvm), '-mcpu=mc6809', '-O2', str(args.runtime_probe), '-o', str(probe)])
     report['runtime_probe'] = {'status': 'FAIL', 'source_sha256': digest(args.runtime_probe),
@@ -283,6 +289,19 @@ def main():
         process.wait(timeout=10)
     report['reached_completion'] = ready
     report['console_log'] = log.read_bytes().replace(b'\0', b'').decode('ascii', errors='replace')
+    for item in report['vbcc_pointer_probes']:
+        destination = work / item['output_file']
+        destination.unlink(missing_ok=True)
+        result = run([os9, 'copy', '-r', str(disk) + ',BENCH/' + item['output_file'], str(destination)], check=False)
+        raw = destination.read_bytes() if destination.exists() else b''
+        item['actual'] = raw.decode('ascii', errors='replace')
+        marker = ('POINTER' + item['configuration_id'] + '\n').encode()
+        console = normalize(log.read_bytes().replace(b'\0', b''))
+        segment = console.split(marker, 1)[-1].split(b'POINTEREND', 1)[0]
+        if (ready and marker in console and result.returncode == 0 and raw == b'ARRAY-OFFSET PASS\r'
+                and not re.search(rb'(?i)(error\s*#|WHAT\?)', segment)):
+            item['status'] = 'PASS'
+        print('VBCC array-offset regression', item['configuration_id'], item['status'], flush=True)
     for name in ('rtout', 'rterr'):
         destination = work / (name + '.txt')
         destination.unlink(missing_ok=True)
@@ -327,12 +346,10 @@ def main():
         row['status'] = 'PASS' if row['cases'] and all(c['status'] == 'PASS' for c in row['cases']) else 'FAIL'
         if row['status'] != 'PASS':
             row['error'] = 'OS-9 execution did not complete or fixture output mismatch'
-        if known_vbcc_ed_offset_failure(row):
-            row['known_failure'] = 'Pinned vbcc preview drops the 256-byte offset in buf + 256'
         print(row['configuration'], row['application'], row['status'], flush=True)
     args.json.parent.mkdir(parents=True, exist_ok=True)
     args.json.write_text(json.dumps(report, indent=2) + '\n')
-    return 0 if report['runtime_probe']['status'] == 'PASS' and len(report['rows']) == len(selected) * len(APPLICATIONS) and all(r['status'] == 'PASS' or (args.allow_vbcc_ed_offset_bug and known_vbcc_ed_offset_failure(r)) for r in report['rows']) else 1
+    return 0 if report_passes(report, len(selected) * len(APPLICATIONS)) else 1
 
 
 if __name__ == '__main__':
