@@ -41,7 +41,8 @@ def main():
     toolbin.mkdir(parents=True, exist_ok=True)
     shutil.copy2(toolshed / 'os9/os9', toolbin / 'os9')
     video = sources / 'pico-thing-video'
-    run(['make', '-C', sources / 'markrvmurray-usim', '-j2', 'usim09pt', 'PICOVIDEO=' + str(video)])
+    run(['make', '-C', sources / 'markrvmurray-usim', '-j2', 'usim09pt', 'PICOVIDEO=' + str(video),
+         'CCFLAGS=-g -O2 -Wno-error=unused-result'])
     kernel = sources / 'nitros9'
     env.update(NITROS9DIR=str(kernel), SOURCE_DATE_EPOCH='1795695367')
     run(['make', '-C', kernel / 'recipes/picothing/l2', '-j2', 'DSKIMAGE=bench.dsk',
