@@ -33,3 +33,11 @@ class ApplicationReportTests(unittest.TestCase):
         self.assertIn('picolibc abcdef123456', page)
         self.assertIn('runtime regression: <strong>FAIL</strong>', page)
         self.assertNotIn('currently treats CR-delimited input as one line', page)
+
+    def test_fixture_and_patch_links_use_the_run_revision(self):
+        report = {'suite': 'os9-apps', 'sources': {}, 'rows': [], 'revision': 'a' * 40,
+                  'vbcc_os9_runtime': {'patch_sha256': 'b' * 64}}
+        page = render_applications([report])
+        self.assertIn('/blob/' + 'a' * 40 + '/benchmarks/os9-apps/cases.json', page)
+        self.assertIn('/blob/' + 'a' * 40 + '/tools/vbcc-os9-rw.patch', page)
+        self.assertNotIn('/blob/main/', page)

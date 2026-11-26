@@ -513,8 +513,8 @@ archive checksums remain pinned in the script.
 ## Real NitrOS-9 applications
 
 A separate [application comparison](https://drpitre.github.io/6809-c-benchmarks/applications.html)
-builds `uniq`, `dgrep` and `ed` from pinned nitros9-apps sources. Eight configurations
-(C3 off/on, LLVM O0/O2/Os/Oz, vbcc O0/O2) execute 27 fixtures each under a real
+builds `uniq`, `dgrep`, `ed`, `cb` and `lb` from pinned nitros9-apps sources. Eight configurations
+(C3 off/on, LLVM O0/O2/Os/Oz, vbcc O0/O2) execute 40 fixtures each under a real
 NitrOS-9 Level 2 kernel in Pico-Thing USIM. Complete module sizes include startup,
 linked libraries, headers and CRC. Only programs passing all their output checks
 receive a size result; application results never enter bare-metal rankings.
@@ -576,3 +576,31 @@ each compiler's own runtime. The common patch supplies missing declarations
 and fixes the signal-handler return type; only C3 defines `BENCH_C3` to retain
 its explicit `pflinit` call. Interactive signal handling and unexercised editor
 commands are outside this scripted comparison.
+
+cb adds eight formatting fixtures: empty input, blocks, nested conditionals,
+comments, quoted delimiters, for loops, switch labels and preprocessor lines.
+The common source patch renames its private puts/gets helpers and retains EOF
+in int variables instead of narrowing it to char. Expected formatted output
+is pinned in the fixture JSON and compared exactly apart from line endings.
+
+lb adds five binary archive fixtures, generated independently by
+`tools/make-os9-rof-fixtures.py`: empty archives, a single module, multiple
+modules, all 256 byte values in code/data, and symbol/relocation tables.
+Each invocation runs in its own disk directory. Every extracted module and
+modlist is compared byte-for-byte. Binary input/output is represented as hex
+in the report; it never goes through text normalization.
+
+The common lb patch fixes declarations and the malformed error call, uses
+explicit 28-byte ROF headers and three-byte references instead of compiler
+struct layouts, and reads/writes 16-bit words in big-endian order. C3 defines
+`BENCH_C3` to select its native raw r/w modes, since its C library rejects the
+ISO b suffix; the other compilers use rb/wb. The algorithm still splits the
+same headers, globals, payloads and references.
+
+The pinned vbcc OS-9 read wrapper returns -1 for native E$EOF (211), causing
+stdio to flag normal EOF as an I/O error. `tools/vbcc-os9-rw.patch` changes
+that case to return zero bytes. The installer assembles an explicit runtime
+object, linked before libos9, and records source/patch/object fingerprints in
+`build/vbcc/OS9-RUNTIME.json`. Other error behavior and the compiler itself
+are unchanged. This EOF fix is independent of the existing ed code-generation
+bug, whose exact failures remain visible and excluded.

@@ -26,3 +26,6 @@ case "$(uname -s)-$(uname -m)" in
         exit 1
         ;;
 esac
+
+# Normalize native OS-9 EOF to a zero-byte read for the C library.
+python3 tools/build-vbcc-os9-runtime.py

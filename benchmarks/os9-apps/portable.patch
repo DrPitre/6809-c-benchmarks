@@ -117,3 +117,229 @@
 +#ifdef BENCH_C3
 @@ -48,0 +51 @@
 +#endif
+--- a/kreider/cb/cb.c
++++ b/kreider/cb/cb.c
+@@ -32 +32 @@
+-char c;
++int c;
+@@ -34,2 +34,2 @@
+-char cc;
+-char lastchar;
++int cc;
++int lastchar;
+@@ -45,0 +46,3 @@
++#include <stdlib.h>
++int getchr(), scan_for_char(), lookup(), getnl();
++void ptabs(), flush_text(), gotelse(), comment();
+@@ -68 +71 @@
+-            puts();
++            flush_text();
+@@ -78 +81 @@
+-         puts();
++         flush_text();
+@@ -101 +104 @@
+-         puts();
++         flush_text();
+@@ -103 +106 @@
+-         puts();
++         flush_text();
+@@ -118 +121 @@
+-         puts();
++         flush_text();
+@@ -127 +130 @@
+-         puts();
++         flush_text();
+@@ -148 +151 @@
+-               puts();
++               flush_text();
+@@ -160 +163 @@
+-         puts();
++         flush_text();
+@@ -166 +169 @@
+-         puts();
++         flush_text();
+@@ -192 +195 @@
+-            puts();
++            flush_text();
+@@ -196 +199 @@
+-            puts();
++            flush_text();
+@@ -204 +207 @@
+-         puts();
++         flush_text();
+@@ -219 +222 @@
+-         puts();
++         flush_text();
+@@ -237 +240 @@
+-         puts();
++         flush_text();
+@@ -244 +247 @@
+-            while ((c = gets()) != ';');
++            while ((c = scan_for_char()) != ';');
+@@ -247 +250 @@
+-            while ((c = gets()) != ')'){
++            while ((c = scan_for_char()) != ')'){
+@@ -256 +259 @@
+-            puts();
++            flush_text();
+@@ -266 +269 @@
+-            puts();
++            flush_text();
+@@ -277 +280 @@
+-ptabs(){
++void ptabs(){
+@@ -289 +292 @@
+-puts(){
++void flush_text(){
+@@ -330,2 +333,2 @@
+-gets(){
+-   char ch;
++scan_for_char(){
++   int ch;
+@@ -344 +347 @@
+-      puts();
++      flush_text();
+@@ -350 +353 @@
+-gotelse(){
++void gotelse(){
+@@ -377 +380 @@
+-comment(){
++void comment(){
+@@ -381 +384 @@
+-         puts();
++         flush_text();
+--- a/kreider/lb/lb.c
++++ b/kreider/lb/lb.c
+@@ -13,0 +14,13 @@
++#include <stdlib.h>
++#include <string.h>
++/* C3 already uses native byte streams and rejects the ISO b modifier. */
++#ifdef BENCH_C3
++#define BIN_READ "r"
++#define BIN_WRITE "w"
++#else
++#define BIN_READ "rb"
++#define BIN_WRITE "wb"
++#endif
++void error(), werror(), rerror(), oerror();
++unsigned read_word();
++void write_word();
+@@ -27,5 +40,2 @@
+-/*  universal 3 byte ref struct  */
+-struct refblk {
+-      char r_flag;                               /* type/location */
+-      unsigned r_offset;
+-      } ref;
++/* ROF references are exactly three file bytes, without C struct padding. */
++char ref[3], header[28];
+@@ -65 +75 @@
+-   if ((ifp = fopen(*++argv,"r")) == NULL)
++   if ((ifp = fopen(*++argv,BIN_READ)) == NULL)
+@@ -71,2 +81,11 @@
+-      if (fread(rhp,sizeof(rofhed),1,ifp) == NULL)  /* get header */
+-            break;                              /* go check error */
++      /* Decode the disk header explicitly; never serialize a C struct. */
++      count = getc(ifp);
++      if (count == EOF) break;
++      header[0] = count;
++      if (fread(header+1,1,27,ifp) != 27) rerror(*argv);
++      rhp->h_synch = ((long)(header[0] & 255) << 24) |
++            ((long)(header[1] & 255) << 16) |
++            ((long)(header[2] & 255) << 8) | (header[3] & 255);
++      rhp->h_data = ((unsigned)(header[18] & 255) << 8) | (header[19] & 255);
++      rhp->h_ddata = ((unsigned)(header[20] & 255) << 8) | (header[21] & 255);
++      rhp->h_ocode = ((unsigned)(header[22] & 255) << 8) | (header[23] & 255);
+@@ -82 +101 @@
+-      if ((ofp = fopen(fmodname,"w")) == NULL)   /* open "modname" */
++      if ((ofp = fopen(fmodname,BIN_WRITE)) == NULL)   /* open "modname" */
+@@ -84 +103 @@
+-      if (fwrite(rhp,sizeof(rofhed),1,ofp) == NULL) /* write header */
++      if (fwrite(header,1,28,ofp) != 28) /* write header */
+@@ -97,2 +116,2 @@
+-   if (!feof(ifp))
+-         error(*argv);
++   if (ferror(ifp))
++         rerror(*argv);
+@@ -100,0 +120 @@
++   return 0;
+@@ -107,2 +127,2 @@
+-   count = getw(ifp);                          /* read glob count */
+-   putw(count,ofp);                           /* write glob count */
++   count = read_word(ifp);                          /* read glob count */
++   write_word(count,ofp);                           /* write glob count */
+@@ -121 +141 @@
+-      if (fread(&ref,sizeof(ref),1,ifp) == NULL)
++      if (fread(ref,1,3,ifp) != 3)
+@@ -123 +143 @@
+-      if (fwrite(&ref,sizeof(ref),1,ofp) == NULL)
++      if (fwrite(ref,1,3,ofp) != 3)
+@@ -131,2 +151,2 @@
+-   count = getw(ifp);                          /* read glob count */
+-   putw(count,ofp);                           /* write glob count */
++   count = read_word(ifp);                          /* read glob count */
++   write_word(count,ofp);                           /* write glob count */
+@@ -141,2 +161,2 @@
+-      refcnt = getw(ifp);
+-      putw(refcnt,ofp);
++      refcnt = read_word(ifp);
++      write_word(refcnt,ofp);
+@@ -145 +165 @@
+-         if (fread(&ref,sizeof(ref),1,ifp) == NULL)
++         if (fread(ref,1,3,ifp) != 3)
+@@ -147 +167 @@
+-         if (fwrite(&ref,sizeof(ref),1,ofp) == NULL)
++         if (fwrite(ref,1,3,ofp) != 3)
+@@ -165,5 +185,5 @@
+-   count = getw(ifp);                           /* get local refs */
+-   putw(count,ofp);                                /* to new file */
+-   while (count--)
+-      {
+-      if (fread(&ref,sizeof(ref),1,ifp) == NULL)    /* copy a ref */
++   count = read_word(ifp);                           /* get local refs */
++   write_word(count,ofp);                                /* to new file */
++   while (count--)
++      {
++      if (fread(ref,1,3,ifp) != 3)    /* copy a ref */
+@@ -171,5 +191,5 @@
+-      if (fwrite(&ref,sizeof(ref),1,ofp) == NULL)
+-            werror(,modname);
+-      }
+-   }
+-werror(s)
++      if (fwrite(ref,1,3,ofp) != 3)
++            werror(modname);
++      }
++   }
++void werror(s)
+@@ -180 +200 @@
+-rerror(s)
++void rerror(s)
+@@ -185 +205 @@
+-oerror(s)
++void oerror(s)
+@@ -190 +210 @@
+-error(s1,s2)
++void error(s1,s2)
+@@ -195,2 +215,19 @@
+-   exit ();
+-   }
+\ No newline at end of file
++   exit (1);
++   }
++/* ROF words are big-endian 16-bit values, independent of host int layout. */
++unsigned read_word(fp)
++FILE *fp;
++{
++   int hi, lo;
++   hi = getc(fp);
++   lo = getc(fp);
++   if (hi == EOF || lo == EOF) rerror("ROF word");
++   return ((unsigned)hi << 8) | lo;
++}
++void write_word(word,fp)
++unsigned word;
++FILE *fp;
++{
++   if (putc((word >> 8) & 255,fp) == EOF || putc(word & 255,fp) == EOF)
++         werror("ROF word");
++}
