@@ -43,8 +43,9 @@ may be 16 or 32 bits. Historical dialect limitations should be recorded explicit
 
 The workflow builds and checks benchmark functions on pushes, pull requests, and manual
 runs using host GCC/Clang and 6809 CMOC, each at `-O0` and `-O2`. CMOC 0.1.101
-and LWTOOLS 4.24 are built from SHA-256-verified release archives. USIM is
-built from the CMOC release. The two CMOC and two C3 jobs each record shared kr16 results as well as
+and LWTOOLS 4.24 are built from SHA-256-verified release archives. USIM is built separately from the pinned
+[markrvmurray/usim](https://github.com/markrvmurray/usim) revision in
+`tools/usim-revision.txt`. The two CMOC and two C3 jobs each record shared kr16 results as well as
 the original-suite results. Together with four host reports, this produces
 eighteen reports, including LLVM, vbcc, and gcc6809 at `-O0` and `-O2`. Host jobs also verify the kr16 algorithms.
 
@@ -309,15 +310,12 @@ Place those binaries and a native vlink in `build/vbcc/bin`, and copy the bundle
 `targets` directory to `build/vbcc/targets`. Native linker versions are recorded
 in reports; CI uses the complete pinned Linux distribution.
 
-The earlier optimized `signed16` failure came from USIM's inverted `NEG`
-carry/borrow flag, rather than vbcc code generation. While awaiting an upstream
-CMOC release containing the fix, `tools/build-cmoc.sh` applies the one-line
-patch in `fixes/usim-neg-carry/` to the pinned simulator source. Benchmark
-sources, compiler flags, and vbcc runtime libraries are unchanged. All 96 vbcc
-checks pass across both optimization settings with the corrected simulator.
-The build verifies all 256 byte inputs in five NEG forms (result and N/Z/V/C),
-plus all 65,536 inputs to vbcc's 16-bit negation sequence. Historical reports
-retain their original results.
+The earlier optimized `signed16` failure came from the old CMOC-bundled
+USIM's inverted `NEG` carry/borrow flag. The benchmark now uses the unmodified
+6809 CPU core from `markrvmurray/usim`, which implements NEG correctly. No local
+CPU patch is applied. The build checks all 256 byte inputs in five NEG forms
+(result and N/Z/V/C), plus all 65,536 inputs to vbcc's 16-bit negation sequence.
+Historical reports retain their original measurements and simulator provenance.
 
 
 ## JKBert/gcc6809
@@ -400,7 +398,7 @@ benchmark suite, not general compiler correctness or all C workloads.
 ### Executed instruction counts
 
 The shared suite records instructions executed in USIM for each of the four
-seeds and their sum. A small opt-in patch to the pinned CMOC USIM source counts
+seeds and their sum. The benchmark machine adapter uses the pinned CPU's `pre_exec` hook to count
 one instruction per CPU execution step; a prefixed opcode still counts as one.
 Each build checks the counter against a hand-counted assembly program: two
 calls of exactly 11 instructions, including a loop, subroutine, and prefixed LDY.
@@ -410,8 +408,8 @@ any target instructions or changing binary size. The range includes the call,
 return, LLVM's ABI register transfers, all benchmark support functions, and
 linked runtime helpers (including C3's no-op stack-check RTS). It excludes startup,
 loading the seed, printing results, and the harness's argument-stack cleanup.
-Linker maps supply the boundary addresses for each compiler. During counted
-bare-metal runs USIM's host-clock IRQ trigger is disabled for deterministic results.
+Linker maps supply the boundary addresses for each compiler. The adapter attaches no interrupt-producing devices, so bare-metal runs are
+deterministic.
 
 The report shows the total across all four seeds; `instructions_by_seed` in
 raw JSON and `*.instructions.log` artifacts preserve individual measurements.
@@ -464,8 +462,12 @@ removed, and changed text highlighted. Unchanged and noncomparable rows are
 omitted. Full measurements remain accessible in the current and preserved reports.
 The main current-compiler rankings use the current release only.
 
-USIM remains pinned to the **0.1.99** archive and the same instruction-counting
-patch for both compiler releases. To reproduce the earlier compiler build:
+USIM is pinned independently of CMOC using `tools/usim-revision.txt` and
+`tools/build-usim.sh`. Changing the CMOC version does not change the simulator.
+The adapter preserves the suite's `$FF00` console, `SYNC` exit convention,
+S-record entry points, and instruction boundaries without changing target
+binaries. Reports record the simulator revision and adapter SHA-256. The
+historical CMOC 0.1.99 snapshot retains its original bundled-USIM provenance. To reproduce the earlier compiler build:
 
 ```sh
 CMOC_VERSION=0.1.99 sh tools/build-cmoc.sh

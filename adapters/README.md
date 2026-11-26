@@ -55,3 +55,22 @@ symbols supply the same size and instruction-count boundaries. The adapter
 links referenced libgcc/newlib helpers without startup, rejects uninitialized
 storage, and reserves the same 4 KiB stack. Sources are built by
 `tools/build-gcc6809.sh`; see the main README for source and install locations.
+
+## Pinned USIM machine
+
+`tools/build-usim.sh` fetches the exact `markrvmurray/usim` commit in
+`tools/usim-revision.txt` and compiles its unmodified 6809 core with
+`usim-bench.cpp`. C++20 is required. No Pico-Thing firmware, SDL, 6309 core,
+or CPU-source patches are needed.
+
+The machine provides 64 KiB RAM, a byte console at `$FF00`, and successful
+exit only for `SYNC` with D=0. It validates 16-bit S-record checksums and uses
+the S9 entry point. Invalid opcodes, malformed inputs, incomplete measurements,
+and the default 100-million-instruction limit fail the run. Override the cap
+with `USIM_MAX_INSTRUCTIONS`. Measurement boundaries use `USIM_BENCH_BEGIN` and
+`USIM_BENCH_END` hexadecimal addresses; the upstream pre-execution hook counts
+instructions between them. No target code or harness byte counts change.
+
+The build checks the hand-counted measurement fixture and exhaustive NEG
+behavior. Existing reports retain their old simulator metadata. New reports
+record the CPU commit and the machine adapter's SHA-256.

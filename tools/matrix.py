@@ -348,7 +348,15 @@ def render(reports, previous_reports=None, historical=False,
         paragraph("C3 is tested against the unchanged C89 benchmark functions. COMPILE FAIL is an observed compatibility result, not a failed runtime checksum. ACCEPTED probes were compiled, not executed. C3 currently lacks limits.h and rejects unsigned short, unsigned long, and U-suffixed constants. These limitations apply to the original C89 suite; the Shared 16-bit suite results above execute real C3-generated code.")
         paragraph("The original compatibility check records rejections; the Shared 16-bit suite runtime check requires passing checksums. Infrastructure failures still fail CI. Full diagnostics are included in the raw JSON and workflow artifacts.")
         content.append("</details>")
-    paragraph("USIM is bundled with CMOC 0.1.99. The shared-suite adapter counts executed instructions with an opt-in USIM patch; it does not measure CPU cycles. Raw JSON, commands, assembly, linker maps, and executables are available in the workflow artifacts.")
+    simulators = {(r['emulator_revision'], r.get('emulator_adapter_sha256', ''),
+                   r.get('emulator_source_url', '')) for r in reports if r.get('emulator_revision')}
+    if simulators:
+        table("Simulator provenance", ["CPU core", "Source revision", "Machine adapter SHA-256"],
+              [["markrvmurray/usim", SourceLink(revision, url), adapter]
+               for revision, adapter, url in sorted(simulators)])
+        paragraph("The unmodified 6809 CPU core is pinned independently of the compilers. The benchmark machine counts executed instructions through the CPU's pre-execution hook; it does not measure CPU cycles. Raw JSON, commands, assembly, linker maps, and executables are available in the workflow artifacts.")
+    else:
+        paragraph("USIM is bundled with CMOC 0.1.99. The shared-suite adapter counts executed instructions with an opt-in USIM patch; it does not measure CPU cycles. Raw JSON, commands, assembly, linker maps, and executables are available in the workflow artifacts.")
     paragraph("Source revisions: " + ", ".join(sorted({r["revision"] for r in reports})))
     content.append('<p><a href="results.json">Raw result data</a> · <a href="matrix.md">Markdown matrix</a></p>')
     document = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'

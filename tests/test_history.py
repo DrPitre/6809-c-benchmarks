@@ -12,6 +12,27 @@ from assembly_report import publish_cmoc_diffs, cmoc_diff_url
 
 
 class HistoryTests(unittest.TestCase):
+    def test_simulator_provenance_does_not_relabel_historical_reports(self):
+        root = Path(__file__).resolve().parents[1]
+        historical = json.loads((root / 'history/llvm-1.0/results.json').read_text())
+        _, archived = render(historical, historical=True)
+        self.assertIn('USIM is bundled with CMOC 0.1.99', archived)
+        self.assertNotIn('Simulator provenance', archived)
+        current = json.loads(json.dumps(historical))
+        revision = '1' * 40
+        adapter = '2' * 64
+        for report in current:
+            if report.get('suite') == 'kr16':
+                report.update(emulator_revision=revision,
+                              emulator_adapter_sha256=adapter,
+                              emulator_source_url='https://github.com/markrvmurray/usim/tree/' + revision)
+        markdown, document = render(current)
+        for text in (markdown, document):
+            self.assertIn('Simulator provenance', text)
+            self.assertIn('https://github.com/markrvmurray/usim/tree/' + revision, text)
+            self.assertIn(adapter, text)
+            self.assertNotIn('USIM is bundled with CMOC 0.1.99', text)
+
     def test_llvm_snapshot_label_and_publication_preserve_both_histories(self):
         root = Path(__file__).resolve().parents[1]
         snapshot = root / 'history/llvm-1.0/results.json'

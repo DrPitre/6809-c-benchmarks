@@ -1,4 +1,5 @@
 """Build unchanged kernels for CMOC's USIM target and collect real results."""
+from usim_metadata import emulator_metadata
 import argparse
 import json
 import os
@@ -55,8 +56,9 @@ def main():
     (directory / "commands.log").write_text("")
     report = {"compiler": "CMOC", "target": "6809 / USIM", "flags": " ".join(flags[:2]),
               "revision": os.environ.get("GITHUB_SHA", "local"), "rows": [],
-              "cycles": None, "emulator": "USIM bundled with CMOC 0.1.99"}
+              "cycles": None}
     try:
+        report.update(emulator_metadata(run([usim, "--version"])))
         report["version"] = run([cmoc, "--version"]).strip()
         report["assembler_version"] = run(["lwasm", "--version"]).strip()
         report["linker_version"] = run(["lwlink", "--version"]).strip()
@@ -83,7 +85,7 @@ def main():
                 row.update(status="FAIL", error=str(error))
             report["rows"].append(row)
             print(name, row["status"])
-    except (OSError, subprocess.SubprocessError) as error:
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
         report["error"] = str(error)
     report["commands"] = commands
     args.json.parent.mkdir(parents=True, exist_ok=True)

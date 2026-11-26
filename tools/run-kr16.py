@@ -1,4 +1,5 @@
 """Execute identical K&R-compatible kernels through a shared USIM harness."""
+from usim_metadata import emulator_metadata
 import argparse
 import hashlib
 import importlib.util
@@ -70,7 +71,7 @@ def main():
               'target': '6809 / USIM bare-metal', 'kind': 'runtime',
               'flags': ('optimizer ' + ('off' if args.optimization == '0' else 'on')) if args.compiler == 'c3' else '-O' + args.optimization,
               'revision': env.get('GITHUB_SHA', 'local'), 'rows': [], 'commands': [],
-              'emulator': 'USIM bundled with CMOC 0.1.99', 'cycles': None,
+              'cycles': None,
               'instruction_scope': 'Four calls including call/return, ABI shims, support functions and runtime helpers; excludes startup and output'}
     (build / 'commands.log').write_text('')
 
@@ -87,6 +88,7 @@ def main():
         return result.stdout + result.stderr if version_probe else result.stdout
 
     try:
+        report.update(emulator_metadata(run(['usim', '--version'])))
         if args.compiler == 'c3':
             revision = (ROOT / 'tools/c3-revision.txt').read_text().strip()
             actual = run(['git', '-C', str(c3base), 'rev-parse', 'HEAD']).strip()
