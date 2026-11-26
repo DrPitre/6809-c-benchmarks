@@ -1,0 +1,9 @@
+{
+  "label": "LLVM-MC6809 1.1.0-rc1",
+  "description": "Published results before updating LLVM-MC6809 to RC2",
+  "source_revision": "70b267bdfcaf12fb7c1c5ea10e1725a98ac17973",
+  "workflow_run": 45827493145,
+  "run_started_at": "2026-11-26T13:16:07Z",
+  "source_url": "https://drpitre.github.io/6809-c-benchmarks/results.json",
+  "results_sha256": "05c1297e8bcd21ac6bcfe8f8690552ee7d30b1e7543045b698ec0f4515f9c984"
+}

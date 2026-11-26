@@ -112,10 +112,10 @@ def main():
             libraries = ['-L' + str(ROOT / 'build/vbcc/targets/6809-sim/lib'), '-lvc']
         elif args.compiler == 'llvm':
             report['version'] = run(['mc6809-clang', '--version']).splitlines()[0]
-            if 'llvm-mc6809 1.1.0-rc1 4d1562877f55663dcc04defa5e7fcc002585bd70' not in report['version']:
+            if 'llvm-mc6809 1.1.0-rc2 19fc4dc208bed7d29e31eeeac21edf177fec5fb6' not in report['version']:
                 raise ValueError('Unexpected LLVM release version')
-            report['release'] = 'RELEASE_1.1.0_rc1'
-            report['release_url'] = 'https://github.com/markrvmurray/llvm-mc6809/releases/tag/RELEASE_1.1.0_rc1'
+            report['release'] = 'RELEASE_1.1.0_rc2'
+            report['release_url'] = 'https://github.com/markrvmurray/llvm-mc6809/releases/tag/RELEASE_1.1.0_rc2'
             report['abi_scratch_bytes'] = 24
             libraries = ['-L' + str(ROOT / 'build/llvm/lib/clang/24/lib/mc6809'), '-lclang_rt.builtins', '-L' + str(ROOT / 'build/llvm/lib/clang-runtimes/mc6809/lib'), '-lc']
         else:
