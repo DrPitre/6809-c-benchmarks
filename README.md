@@ -514,8 +514,8 @@ archive checksums remain pinned in the script.
 ## Real NitrOS-9 applications
 
 A separate [application comparison](https://drpitre.github.io/6809-c-benchmarks/applications.html)
-builds `uniq`, `dgrep`, `ed`, `cb` and `lb` from pinned nitros9-apps sources. Eight configurations
-(C3 off/on, LLVM O0/O2/Os/Oz, vbcc O0/O2) execute 40 fixtures each under a real
+builds `uniq`, `dgrep`, `ed`, `cb`, `lb` and `ppc` from pinned nitros9-apps sources. Eight configurations
+(C3 off/on, LLVM O0/O2/Os/Oz, vbcc O0/O2) execute 48 fixtures each under a real
 NitrOS-9 Level 2 kernel in Pico-Thing USIM. Complete module sizes include startup,
 linked libraries, headers and CRC. Only programs passing all their output checks
 receive a size result; application results never enter bare-metal rankings.
@@ -540,7 +540,7 @@ the newline retained by fgets. Inputs use native CR line endings. Output checks
 normalize line endings only and preserve all other bytes. Fixtures cover short,
 terminated ASCII lines; long lines and unterminated input are outside this suite.
 
-C3, LLVM and the source-built patched vbcc pass all 320 application fixtures.
+C3, LLVM and the source-built patched vbcc pass all 384 application fixtures.
 vbcc's frontend previously narrowed the one-past offset for a 256-byte array
 to an 8-bit value. `patches/vbcc-array-offset/fix.patch` corrects the boundary
 checks for all candidate offset types. `tools/build-vbcc-compiler.py` verifies
@@ -619,3 +619,14 @@ runs as two separate translation units at O0/O1023 so the checker sees actual
 pointer values, not a compiler-folded comparison. The unpatched preview
 reports four failing checks at each setting; the patched compiler passes all
 twelve checks and all ed substitution/save/read-back fixtures.
+
+### ppc paginated source printing
+
+ppc adds eight fixtures for line numbering, `-n`, forced page breaks,
+automatic pagination across the 59/60-line boundary, print suppression,
+multiple input files, empty input and exact column-one directive matching.
+All eight configurations compile the same `ppc-clock.c` adapter in place of
+`getime`, fixing the header clock to 2026-11-26 13:45:06. Header formatting
+and pagination use the upstream implementation; comparisons preserve
+spaces and form-feed bytes and normalize only text line endings.
+The report records the clock adapter hash alongside the prepared sources.

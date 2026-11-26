@@ -12,7 +12,7 @@ def render_applications(reports):
               '<title>NitrOS-9 application comparison</title><style>' + STYLE + '</style></head><body><main>',
               '<header><p><a href="index.html">Back to compiler bake-off</a></p>',
               '<h1>NitrOS-9 applications</h1>',
-              '<p class="intro">Complete uniq, dgrep, ed, cb and lb programs, including startup and linked C libraries.</p></header>']
+              '<p class="intro">Complete uniq, dgrep, ed, cb, lb and ppc programs, including startup and linked C libraries.</p></header>']
     if not apps:
         return ''.join(chunks) + '<p>No application report received.</p></main></body></html>'
     if len(apps) != 1:
@@ -26,6 +26,9 @@ def render_applications(reports):
         chunks.append('<p>vbcc is rebuilt from the pinned preview with the <a href="https://github.com/DrPitre/6809-c-benchmarks/blob/main/patches/vbcc-array-offset/fix.patch">one-past array-offset fix</a>.</p>')
     if report.get('vbcc_os9_runtime'):
         chunks.append('<p>vbcc uses the <a href="https://github.com/DrPitre/6809-c-benchmarks/blob/main/tools/vbcc-os9-rw.patch">OS-9 EOF wrapper fix</a>, which returns a zero-byte read at native end of file.</p>')
+    if report.get('ppc_clock'):
+        chunks.append('<p>ppc page headers use a fixed clock: ' + esc(report['ppc_clock']['timestamp']) +
+                      ' (<a href="https://github.com/DrPitre/6809-c-benchmarks/blob/main/benchmarks/os9-apps/ppc-clock.c">shared clock adapter</a>).</p>')
     probe = report.get('runtime_probe')
     if probe:
         chunks.append('<p>OS-9 text/binary runtime regression: <strong>' + esc(probe['status']) + '</strong> (including exact CR bytes on redirected standard output and error).</p>')
@@ -39,7 +42,7 @@ def render_applications(reports):
         chunks.append('<p>Run started: ' + esc(report['run_started_at']) +
                       (' · <a href="' + esc(report['workflow_run_url']) + '">Workflow run</a>' if report.get('workflow_run_url') else '') + '</p>')
     chunks.append('<p>Only programs passing every fixture receive a size result. Module bytes include the OS-9 header, name, CRC, startup and linked runtime. Requested data is the module header’s allocation request, not measured peak RAM. These results do not enter the kernel rankings.</p>')
-    for app in ('uniq', 'dgrep', 'ed', 'cb', 'lb'):
+    for app in ('uniq', 'dgrep', 'ed', 'cb', 'lb', 'ppc'):
         chunks.append('<section><h2>' + app + '</h2><div class="table-scroll"><table><thead><tr><th>Configuration</th><th>Output checks</th><th>Module bytes</th><th>Requested data bytes</th></tr></thead><tbody>')
         for row in [r for r in rows if r['application'] == app]:
             passed = sum(c['status'] == 'PASS' for c in row['cases'])
@@ -53,9 +56,9 @@ def render_applications(reports):
         for issue in issues:
             chunks.append('<p>' + esc(issue) + '. These failed builds are excluded. <a href="https://github.com/DrPitre/6809-c-benchmarks/blob/main/benchmarks/os9-apps/vbcc-ed-offset.c">Minimal reproducer</a>.</p>')
         chunks.append('</section>')
-    chunks.append('<section><h2>What the fixtures exercise</h2><p>uniq: adjacent grouping, unique/repeated selection, counts, skipped fields and characters, empty input and nonadjacent repeats. dgrep: case-insensitive literals, anchors, character classes, repetition, digits, inversion, counts, line numbers, files and no matches. ed: append/print, substitution, delete, insert, move, global matching, native CR file input, and save/reopen with exact saved-file bytes. cb: blocks, nested conditionals, comments, quotes, loops, switch labels and preprocessor lines. lb: empty and multi-module archives, every byte value, symbols and relocation references; every extracted file is checked byte-for-byte.</p>')
+    chunks.append('<section><h2>What the fixtures exercise</h2><p>uniq: adjacent grouping, unique/repeated selection, counts, skipped fields and characters, empty input and nonadjacent repeats. dgrep: case-insensitive literals, anchors, character classes, repetition, digits, inversion, counts, line numbers, files and no matches. ed: append/print, substitution, delete, insert, move, global matching, native CR file input, and save/reopen with exact saved-file bytes. cb: blocks, nested conditionals, comments, quotes, loops, switch labels and preprocessor lines. lb: empty and multi-module archives, every byte value, symbols and relocation references; every extracted file is checked byte-for-byte. ppc: numbered and unnumbered output, automatic and forced page breaks, suppression, multiple files, empty input and column-one directives.</p>')
     chunks.append('<p>Inputs use native OS-9 CR line endings. Text stdout comparisons normalize line endings only. Saved-file checks compare raw bytes, including every ROF header, payload, reference and module listing. The runtime regression separately checks native CR output, binary data, memory/cookie streams, seeks and mode changes. Failed application outputs remain in the raw results and are excluded from size comparisons. No application speed claim is made.</p>')
-    chunks.append('<p>A common source patch adds missing declarations, corrects the fopen failure test and lets dgrep’s end anchor match the newline retained by fgets. Every compiler receives identical prepared source. ed also receives missing declarations and a signal-handler return-type fix; only C3 enables its runtime’s explicit printf initialization. cb also receives EOF-safe input variables and renamed helpers; lb uses explicit 28-byte headers, three-byte references and big-endian words. C3 selects its native byte-stream file modes. Text inputs are short CR-terminated ASCII lines; lb inputs are binary archives. Long text lines and missing final newlines are outside this suite.</p>')
+    chunks.append('<p>A common source patch adds missing declarations, corrects the fopen failure test and lets dgrep’s end anchor match the newline retained by fgets. Every compiler receives identical prepared source. ed also receives missing declarations and a signal-handler return-type fix; only C3 enables its runtime’s explicit printf initialization. cb also receives EOF-safe input variables and renamed helpers; lb uses explicit 28-byte headers, three-byte references and big-endian words. C3 selects its native byte-stream file modes. ppc receives missing declarations and the same fixed getime replacement for every compiler (2026-11-26 13:45:06); its header formatting and pagination remain upstream. The clock adapter is included in prepared-source hashes. Text inputs are short CR-terminated ASCII lines; lb inputs are binary archives. Long text lines and missing final newlines are outside this suite.</p>')
     chunks.append('<p><a href="https://github.com/DrPitre/6809-c-benchmarks/blob/main/benchmarks/os9-apps/portable.patch">Common source patch</a> · <a href="https://github.com/DrPitre/6809-c-benchmarks/blob/main/benchmarks/os9-apps/cases.json">Fixtures</a> · <a href="results.json">Raw results and exact output differences</a></p></section>')
     chunks.append('<section><h2>Pinned sources</h2><ul>')
     for key, pin in report['sources'].items():
