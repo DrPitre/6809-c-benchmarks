@@ -14,14 +14,14 @@ class KnownCompilerFailureTests(unittest.TestCase):
     def setUp(self):
         fixtures = json.loads((ROOT / 'benchmarks/os9-apps/cases.json').read_text())
         self.row = {'application': 'ed', 'configuration_id': 'vb02', 'stage': 'execution',
-                    'status': 'FAIL', 'cases': [{'id': c['id'], 'status': 'PASS', 'files': []}
+                    'status': 'FAIL', 'cases': [{'id': c['id'], 'status': 'PASS', 'files': [], 'execution_completed': True, 'copied': True}
                                                for c in fixtures if c['app'] == 'ed']}
         for case in self.row['cases']:
             if case['id'] == 'substitute':
                 case.update(status='FAIL', actual='?\nalpha alpha\nbeta\n')
             elif case['id'] == 'save-reopen':
                 case.update(status='FAIL', actual='?\nalpha\nbeta\n',
-                            files=[{'id': 'RESULT', 'status': 'FAIL', 'actual': 'alpha\rbeta\r'}])
+                            files=[{'id': 'RESULT', 'status': 'FAIL', 'copied': True, 'actual': 'alpha\rbeta\r'}])
 
     def test_recognizes_only_the_recorded_bug_without_marking_it_pass(self):
         self.assertTrue(apps.known_vbcc_ed_offset_failure(self.row))
@@ -46,3 +46,12 @@ class KnownCompilerFailureTests(unittest.TestCase):
         self.assertFalse(apps.known_vbcc_ed_offset_failure(row))
         self.row['stage'] = 'build'
         self.assertFalse(apps.known_vbcc_ed_offset_failure(self.row))
+
+    def test_execution_and_extraction_errors_cannot_be_accepted(self):
+        for field in ('execution_completed', 'copied'):
+            row = copy.deepcopy(self.row)
+            next(c for c in row['cases'] if c['id'] == 'substitute')[field] = False
+            self.assertFalse(apps.known_vbcc_ed_offset_failure(row))
+        row = copy.deepcopy(self.row)
+        next(c for c in row['cases'] if c['id'] == 'save-reopen')['files'][0]['copied'] = False
+        self.assertFalse(apps.known_vbcc_ed_offset_failure(row))

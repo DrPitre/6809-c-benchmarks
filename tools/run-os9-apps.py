@@ -64,12 +64,15 @@ def known_vbcc_ed_offset_failure(row):
     failed = {c['id']: c for c in row['cases'] if c['status'] != 'PASS'}
     if set(failed) != {'substitute', 'save-reopen'}:
         return False
+    if any(not c.get('execution_completed') or not c.get('copied') for c in failed.values()):
+        return False
     if failed['substitute'].get('actual') != '?\nalpha alpha\nbeta\n':
         return False
     saved = failed['save-reopen']
     return (saved.get('actual') == '?\nalpha\nbeta\n'
             and len(saved.get('files', [])) == 1
             and saved['files'][0].get('id') == 'RESULT'
+            and saved['files'][0].get('copied') is True
             and saved['files'][0].get('actual') == 'alpha\rbeta\r')
 
 
@@ -273,11 +276,13 @@ def main():
             result = run([os9, 'copy', '-r', str(disk) + ',BENCH/' + case['output_file'], str(host)], check=False)
             actual = normalize(host.read_bytes()).decode('ascii', errors='replace') if host.exists() else None
             case['actual'] = actual
+            case['copied'] = result.returncode == 0
             for saved in case.get('files', []):
                 destination = work / (saved['output_file'] + '.txt')
                 destination.unlink(missing_ok=True)
                 copied = run([os9, 'copy', '-r', str(disk) + ',BENCH/' + saved['output_file'], str(destination)], check=False)
                 raw = destination.read_bytes() if destination.exists() else None
+                saved['copied'] = copied.returncode == 0
                 saved['actual'] = raw.decode('ascii', errors='replace') if raw is not None else None
                 expected = saved['expected'].replace('\n', '\r').encode('ascii')
                 saved['status'] = 'PASS' if copied.returncode == 0 and raw == expected else 'FAIL'
@@ -286,6 +291,7 @@ def main():
             marker = ('CASE' + row['configuration_id'] + str(fixture_index) + '\n').encode()
             segment = console.split(marker, 1)[-1].split(b'CASE', 1)[0].split(b'APPDONE', 1)[0]
             executed = marker in console and not re.search(rb'(?i)(error\s*#|WHAT\?)', segment)
+            case['execution_completed'] = ready and executed
             case['status'] = 'PASS' if ready and executed and result.returncode == 0 and actual == case['expected'] and all(f['status'] == 'PASS' for f in case.get('files', [])) else 'FAIL'
         row['status'] = 'PASS' if row['cases'] and all(c['status'] == 'PASS' for c in row['cases']) else 'FAIL'
         if row['status'] != 'PASS':
