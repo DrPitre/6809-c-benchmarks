@@ -309,10 +309,15 @@ Place those binaries and a native vlink in `build/vbcc/bin`, and copy the bundle
 `targets` directory to `build/vbcc/targets`. Native linker versions are recorded
 in reports; CI uses the complete pinned Linux distribution.
 
-The optimized build currently fails `signed16`: seed `0` returns `$91B2`
-instead of `$ED62`. All four seeds disagree. The unoptimized build passes;
-the report excludes the failing optimized result from size rankings. The
-cause has not yet been isolated to compiler code generation or a runtime helper.
+The earlier optimized `signed16` failure came from USIM's inverted `NEG`
+carry/borrow flag, rather than vbcc code generation. While awaiting an upstream
+CMOC release containing the fix, `tools/build-cmoc.sh` applies the one-line
+patch in `fixes/usim-neg-carry/` to the pinned simulator source. Benchmark
+sources, compiler flags, and vbcc runtime libraries are unchanged. All 96 vbcc
+checks pass across both optimization settings with the corrected simulator.
+The build verifies all 256 byte inputs in five NEG forms (result and N/Z/V/C),
+plus all 65,536 inputs to vbcc's 16-bit negation sequence. Historical reports
+retain their original results.
 
 
 ## JKBert/gcc6809

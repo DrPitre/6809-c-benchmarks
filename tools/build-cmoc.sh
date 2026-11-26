@@ -33,6 +33,7 @@ if [ "$cmoc_version" != 0.1.99 ]; then tar -xzf "../downloads/cmoc-$cmoc_version
 make -C lwtools-4.24 -j2
 make -C lwtools-4.24 install PREFIX="$prefix"
 export PATH="$prefix/bin:$PATH"
+patch -d cmoc-0.1.99 -p1 < "$root/fixes/usim-neg-carry/usim-neg-carry.patch"
 python3 "$root/tools/instrument-usim.py" cmoc-0.1.99/src/usim-0.91-cmoc
 cd "cmoc-$cmoc_version"
 ./configure --prefix="$prefix"
@@ -46,3 +47,5 @@ if [ "$cmoc_version" != 0.1.99 ]; then
 fi
 cp src/usim-0.91-cmoc/usim "$prefix/bin/usim"
 python3 "$root/tools/check-usim-count.py"
+
+python3 "$root/fixes/usim-neg-carry/check-neg.py" --lwasm "$prefix/bin/lwasm" --usim "$prefix/bin/usim"
