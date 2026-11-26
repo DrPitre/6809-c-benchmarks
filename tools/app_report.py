@@ -26,7 +26,7 @@ def render_applications(reports):
                       (' · <a href="' + esc(report['workflow_run_url']) + '">Workflow run</a>' if report.get('workflow_run_url') else '') + '</p>')
     chunks.append('<p>Only programs passing every fixture receive a size result. Module bytes include the OS-9 header, name, CRC, startup and linked runtime. Requested data is the module header’s allocation request, not measured peak RAM. These results do not enter the kernel rankings.</p>')
     for app in ('uniq', 'dgrep'):
-        chunks.append('<section><h2>' + app + '</h2><div class="table-wrap"><table><thead><tr><th>Configuration</th><th>Output checks</th><th>Module bytes</th><th>Requested data bytes</th></tr></thead><tbody>')
+        chunks.append('<section><h2>' + app + '</h2><div class="table-scroll"><table><thead><tr><th>Configuration</th><th>Output checks</th><th>Module bytes</th><th>Requested data bytes</th></tr></thead><tbody>')
         for row in [r for r in rows if r['application'] == app]:
             passed = sum(c['status'] == 'PASS' for c in row['cases'])
             valid = row['status'] == 'PASS'

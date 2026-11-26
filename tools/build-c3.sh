@@ -16,10 +16,11 @@ fi
 export PATH="$root/build/toolchain/bin:$PATH"
 # Build each required stage explicitly: the upstream aggregate recipe may
 # conceal a failing intermediate make behind a later successful stage.
-for stage in exec prep comp optx; do
+for stage in exec prep comp comp1 comp2 optx; do
     # glibc hides kill/mkstemp declarations in strict C89 without feature macros.
     make -C "$source/c3/build/unix/$stage" CPPFLAGS=-D_DEFAULT_SOURCE
 done
+sh "$source/c3/scripts/check-unix-strings.sh"
 cd "$source/c3/lwbackend"
 sh buildrt.sh
 sh buildlibc.sh
