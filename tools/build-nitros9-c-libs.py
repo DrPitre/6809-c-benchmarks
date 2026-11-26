@@ -1,4 +1,5 @@
 """Build the pinned non-floating-point CMOC OS-9 C library."""
+import argparse
 import hashlib
 import json
 import os
@@ -14,6 +15,9 @@ def digest(path):
 
 
 def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--fetch-only',action='store_true',help='verify/fetch the shared source without building CMOC')
+    args=parser.parse_args()
     pin = json.loads((ROOT / 'tools/os9-app-sources.json').read_text())['c_libs']
     source = ROOT / 'build/sources/nitros9-c-libs'
     env = os.environ.copy()
@@ -30,6 +34,9 @@ def main():
         raise SystemExit('CMOC OS-9 library source revision mismatch')
     if run(['git', '-C', str(source), 'status', '--porcelain', '--untracked-files=no']):
         raise SystemExit('CMOC OS-9 library source has local modifications')
+    if args.fetch_only:
+        print(source)
+        return
     compiler = Path(shutil.which('cmoc', path=env['PATH']))
     version = run([str(compiler), '--version'])
     if version != 'cmoc (cmoc 0.1.101)':

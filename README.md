@@ -681,3 +681,17 @@ input API, including saved text and lb’s module listing; binary archive bytes
 remain unchanged. CMOC uses the stack-based MicroEMACS message formatter.
 The ROF header byte array is unsigned for CMOC, avoiding sign extension of
 masked header bytes during long shifts.
+
+### Canonical C3 C library
+
+The pinned C3 consumer builds `libc3.a` and its headers from the same
+`nitros9-c-libs` commit as CMOC's `libc.a`, using each compiler's native ABI.
+The C3 compiler retains its own startup and floating-point primitives. Its
+integer/long helpers for the shared bare-metal suite also come from the canonical
+library; the old compiler-local C library is not used by any bakeoff build.
+
+`tools/build-c3.sh` verifies that the compiler's library pin matches
+`tools/os9-app-sources.json`. Reports record and validate `c3_library` provenance,
+the library archive hash, and all three compiler-stage hashes before execution.
+`LIBC.json` is included in CI evidence. C3 uses its generated canonical headers
+rather than the historical local header copy.

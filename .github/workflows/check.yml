@@ -104,6 +104,7 @@ jobs:
         with:
           name: c3-evidence-${{ matrix.optimizer }}
           path: |
+            build/sources/nitros9-languages/c3/lwbackend/LIBC.json
             build/c3-${{ matrix.optimizer }}/
             build/kr16-c3-*/
 
@@ -248,6 +249,7 @@ jobs:
             build/vbcc-compiler-build.log
             build/vbcc-os9-runtime/
             build/cmoc-os9/
+            build/sources/nitros9-languages/c3/lwbackend/LIBC.json
             build/sources/nitros9/recipes/picothing/l2/rel_picothing.srec
 
   matrix:
