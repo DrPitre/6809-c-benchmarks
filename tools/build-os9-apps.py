@@ -33,7 +33,11 @@ def main():
         if dirty:
             raise SystemExit('Source has local modifications: ' + name)
     toolshed = sources / 'toolshed/build/unix'
-    run(['make', '-C', toolshed, 'NO_COCOFUSE=1'])
+    # Build only the disk utility and its libraries; GUI tools and upstream
+    # unit-test executables are not dependencies of the benchmark image.
+    for component in ('libtoolshed', 'libnative', 'libcecb', 'librbf', 'libcoco',
+                      'libdecb', 'libdiskimage', 'libdragondos', 'libmisc', 'libsys', 'os9'):
+        run(['make', '-C', toolshed / component])
     toolbin.mkdir(parents=True, exist_ok=True)
     shutil.copy2(toolshed / 'os9/os9', toolbin / 'os9')
     video = sources / 'pico-thing-video'
