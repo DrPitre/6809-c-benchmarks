@@ -125,7 +125,7 @@ local release archive. LWTOOLS is downloaded over HTTPS.
 
 ## C3 (C-Cubed) and the shared kr16 suite
 
-C3 comes from [nitros9-languages](https://github.com/nitros9project/nitros9-languages/tree/e6e1a014c092fafc5e1378195ad33659b4e54676/c3),
+C3 comes from [nitros9-languages](https://github.com/nitros9project/nitros9-languages/tree/81120bb5bd9dd2d2d221a527af33f980108a26ed/c3),
 pinned by `tools/c3-revision.txt`. Host builds enable glibc default API
 declarations with `CPPFLAGS=-D_DEFAULT_SOURCE` while preserving upstream
 C89 compiler flags. Both its default optimizer and `-o`
@@ -270,16 +270,14 @@ Comparison tables group optimization On/Off subrows beneath one linked benchmark
 name. Expand **Test purposes and source files** for descriptions, supporting
 functions, and the original C89 suite. Links point to the exact Git commit used by CI. Local previews without a commit ID use `main`.
 
-### Failure discovered by the expanded suite
+### C3 structure-declaration fix
 
-The pinned C3 compiler built with GCC on GitHub's Linux runner crashes with
-exit 139 while compiling `list16.c`, before its target-code optimizer runs.
-Both optimizer configurations expose it. The same source compiles and executes
-correctly with the locally built C3 on macOS; CMOC and LLVM pass it on both
-hosts. This identifies a host-dependent C3 compilation failure, not a runtime
-checksum failure. The underlying compiler defect has not been diagnosed.
-The report retains the failure and excludes its size; CI correctly flags the
-C3 jobs. Source, commands, and diagnostics are preserved for investigation.
+The C3 pin includes upstream PR #18, which initializes `settype`'s dimension
+output before its structure-tag early returns. This fixes the host-dependent
+`list16.c` compiler crash without changing the shared benchmark sources.
+The fix is present in `comp`, `compexp`, and `compexpansi`; upstream regression
+checks cover single-pass, two-pass, and experimental compilation. The benchmark
+uses the merged upstream revision directly, without a local compiler patch.
 
 
 ## vbcc 6809
