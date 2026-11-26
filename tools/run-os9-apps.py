@@ -58,6 +58,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--json', type=Path, required=True)
     parser.add_argument('--configuration', action='append', help='Limit to named config IDs for local checks')
+    parser.add_argument('--runtime-probe', type=Path, default=ROOT / 'build/sources/picolibc/test/test-stdio/test-os9-text.c')
     parser.add_argument('--wall-seconds', type=int, default=180)
     args = parser.parse_args()
     work = ROOT / 'build/os9-apps'
@@ -84,6 +85,7 @@ def main():
               'compiler_versions': {'C3': (ROOT / 'tools/c3-revision.txt').read_text().strip(),
                                     'LLVM': (ROOT / 'build/llvm/VERSION').read_text().strip(),
                                     'VBCC': '6809 Release 1 Preview 2026-01-25; archive SHA-256 18db043d4d4c8b0a16d4fa4b813616f277fcfb3667be0eda2334a8b8b024917e'},
+              'llvm_runtime': json.loads((ROOT / 'build/llvm/OS9-RUNTIME.json').read_text()),
               'rows': [], 'commands': []}
 
     def run(command, cwd=work, check=True):
@@ -168,6 +170,15 @@ def main():
             startup.append(command + ' >' + output_name)
             row['cases'].append({'id': case['id'], 'output_file': output_name,
                                  'expected': case['output'], 'status': 'NOT RUN'})
+    probe = work / 'iotest'
+    run([str(llvm), '-mcpu=mc6809', '-O2', str(args.runtime_probe), '-o', str(probe)])
+    report['runtime_probe'] = {'status': 'FAIL', 'source_sha256': digest(args.runtime_probe),
+                               **module_info(probe, 'iotest')}
+    run([os9, 'copy', '-r', str(probe), str(disk) + ',BENCH/CMDS/iotest'])
+    run([os9, 'attr', '-q', '-e', '-pe', '-pr', str(disk) + ',BENCH/CMDS/iotest'])
+    (work / 'rtin').write_bytes(b'one\rtwo\r')
+    run([os9, 'copy', '-r', str(work / 'rtin'), str(disk) + ',BENCH/rtin'])
+    startup.extend(['echo RUNTIMEBEGIN', 'iotest stdin <rtin >rtout >>rterr', 'echo RUNTIMEEND'])
     startup.append('echo APPDONE')
     (work / 'startup').write_bytes(('\r'.join(startup) + '\r').encode('ascii'))
     run([os9, 'copy', '-r', str(work / 'startup'), str(disk) + ',startup'])
@@ -191,6 +202,16 @@ def main():
         process.wait(timeout=10)
     report['reached_completion'] = ready
     report['console_log'] = log.read_bytes().replace(b'\0', b'').decode('ascii', errors='replace')
+    for name in ('rtout', 'rterr'):
+        destination = work / (name + '.txt')
+        destination.unlink(missing_ok=True)
+        result = run([os9, 'copy', '-r', str(disk) + ',BENCH/' + name, str(destination)], check=False)
+        raw = destination.read_bytes() if destination.exists() else b''
+        report['runtime_probe'][name] = raw.decode('ascii', errors='replace')
+    runtime_console = normalize(log.read_bytes().replace(b'\0', b'')).split(b'RUNTIMEBEGIN\n', 1)[-1].split(b'RUNTIMEEND\n', 1)[0]
+    if ready and not re.search(rb'(?i)(error\s*#|WHAT\?)', runtime_console) and report['runtime_probe']['rtout'] == 'OS9TEXT PASS\r' and report['runtime_probe']['rterr'] == 'OS9TEXT STDERR\r':
+        report['runtime_probe']['status'] = 'PASS'
+    print('OS-9 text/binary runtime regression', report['runtime_probe']['status'], flush=True)
     console = normalize(log.read_bytes().replace(b'\0', b''))
     for row, module in pending:
         for case in row['cases']:
@@ -211,7 +232,7 @@ def main():
         print(row['configuration'], row['application'], row['status'], flush=True)
     args.json.parent.mkdir(parents=True, exist_ok=True)
     args.json.write_text(json.dumps(report, indent=2) + '\n')
-    return 0 if len(report['rows']) == len(selected) * 2 and all(r['status'] == 'PASS' for r in report['rows']) else 1
+    return 0 if report['runtime_probe']['status'] == 'PASS' and len(report['rows']) == len(selected) * 2 and all(r['status'] == 'PASS' for r in report['rows']) else 1
 
 
 if __name__ == '__main__':

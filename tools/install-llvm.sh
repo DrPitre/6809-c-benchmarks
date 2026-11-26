@@ -31,3 +31,6 @@ if [ -d "$root/build/llvm" ]; then
 fi
 mv "$staging" "$root/build/llvm"
 "$root/build/llvm/bin/mc6809-clang" --version
+
+# Keep the compiler at RC2; rebuild only its default 6809 OS-9 C library.
+python3 "$root/tools/build-llvm-os9-runtime.py"

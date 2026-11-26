@@ -17,6 +17,13 @@ def render_applications(reports):
     if len(apps) != 1:
         raise ValueError('Expected exactly one OS-9 application report')
     report = apps[0]
+    runtime = report.get('llvm_runtime')
+    if runtime:
+        link = runtime['url'].removesuffix('.git') + '/commit/' + runtime['revision']
+        chunks.append('<p>LLVM RC2 uses the OS-9 text runtime fix from <a href="' + esc(link) + '">picolibc ' + esc(runtime['revision'][:12]) + '</a>. The compiler remains the released RC2 binary.</p>')
+    probe = report.get('runtime_probe')
+    if probe:
+        chunks.append('<p>OS-9 text/binary runtime regression: <strong>' + esc(probe['status']) + '</strong> (including exact CR bytes on redirected standard output and error).</p>')
     rows = report['rows']
     cases = [c for r in rows for c in r['cases']]
     chunks.append('<p>' + str(sum(c['status'] == 'PASS' for c in cases)) + '/' + str(len(cases)) +
@@ -36,7 +43,7 @@ def render_applications(reports):
                           '</td><td>' + (str(row['requested_data_bytes']) if valid else '—') + '</td></tr>')
         chunks.append('</tbody></table></div></section>')
     chunks.append('<section><h2>What the fixtures exercise</h2><p>uniq: adjacent grouping, unique/repeated selection, counts, skipped fields and characters, empty input and nonadjacent repeats. dgrep: case-insensitive literals, anchors, character classes, repetition, digits, inversion, counts, line numbers, files and no matches.</p>')
-    chunks.append('<p>Inputs use native OS-9 CR line endings. Output comparison normalizes CR and LF only; it checks every remaining byte. LLVM RC2 currently treats CR-delimited input as one line; its failing cases remain in the raw results. No application speed claim is made.</p>')
+    chunks.append('<p>Inputs use native OS-9 CR line endings. Output comparison normalizes CR and LF only; it checks every remaining byte. The runtime regression separately checks native CR output, binary data, memory/cookie streams, seeks and mode changes. Failed application outputs remain in the raw results and are excluded from size comparisons. No application speed claim is made.</p>')
     chunks.append('<p>A common source patch adds missing declarations, corrects the fopen failure test and lets dgrep’s end anchor match the newline retained by fgets. Every compiler receives identical prepared source. Inputs are short ASCII lines ending in CR; long lines and missing final newlines are outside this first suite.</p>')
     chunks.append('<p><a href="https://github.com/DrPitre/6809-c-benchmarks/blob/main/benchmarks/os9-apps/portable.patch">Common source patch</a> · <a href="https://github.com/DrPitre/6809-c-benchmarks/blob/main/benchmarks/os9-apps/cases.json">Fixtures</a> · <a href="results.json">Raw results and exact output differences</a></p></section>')
     chunks.append('<section><h2>Pinned sources</h2><ul>')

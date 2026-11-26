@@ -116,7 +116,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install build prerequisites
-        run: sudo apt-get update && sudo apt-get install -y build-essential bison flex curl xz-utils
+        run: sudo apt-get update && sudo apt-get install -y build-essential bison flex curl xz-utils git ninja-build python3-pip
       - name: Build pinned simulator dependency
         run: sh tools/build-cmoc.sh
       - name: Install pinned LLVM-MC6809 1.1.0-rc2
@@ -215,16 +215,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install build prerequisites
-        run: sudo apt-get update && sudo apt-get install -y build-essential bison flex curl git unzip xz-utils libsdl2-dev pkg-config zlib1g-dev
+        run: sudo apt-get update && sudo apt-get install -y build-essential bison flex curl git unzip xz-utils ninja-build python3-pip libsdl2-dev pkg-config zlib1g-dev
       - run: sh tools/build-cmoc.sh
       - run: sh tools/build-c3.sh
       - run: sh tools/install-llvm.sh
       - run: sh tools/install-vbcc.sh
       - name: Build pinned NitrOS-9 application environment
         run: python3 tools/build-os9-apps.py
+      - name: Verify OS-9 fast block I/O preserves text and binary behavior
+        run: |
+          python3 tools/build-llvm-os9-runtime.py --fast-bufio
+          python3 tools/run-os9-apps.py --configuration ll02 --json build/os9-fast/report.json
+          python3 tools/build-llvm-os9-runtime.py
       - name: Execute application output checks
-        # Preserve correctness failures as results, as in the kernel comparison.
-        continue-on-error: true
         run: python3 tools/run-os9-apps.py --json reports/os9-apps.json
       - uses: actions/upload-artifact@v4
         if: always()
@@ -238,6 +241,8 @@ jobs:
           name: os9-apps-evidence
           path: |
             build/os9-apps/
+            build/os9-fast/
+            build/llvm/OS9-RUNTIME.json
             build/sources/nitros9/recipes/picothing/l2/rel_picothing.srec
 
   matrix:

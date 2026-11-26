@@ -539,10 +539,23 @@ the newline retained by fgets. Inputs use native CR line endings. Output checks
 normalize line endings only and preserve all other bytes. Fixtures cover short,
 terminated ASCII lines; long lines and unterminated input are outside this suite.
 
-C3 and vbcc pass the initial fixtures. LLVM RC2 currently reads CR-delimited files
-as one long line; those output mismatches remain visible, and its sizes are
-excluded. This suite measures complete program size, not execution speed or peak
+C3, vbcc and LLVM RC2 with the pinned OS-9 runtime fix pass the fixtures.
+The LLVM compiler remains the released RC2 binary. `tools/llvm-os9-runtime.json`
+pins the picolibc source fix; `tools/install-llvm.sh` rebuilds its default 6809
+integer OS-9 C library with Meson 1.11.2. Other bundled targets and variants
+remain the release libraries. Building this overlay requires Git, Ninja and
+Python pip in addition to the existing release installer prerequisites.
+
+The runtime converts CR to C newline on input and C newline to CR on output
+for descriptor-backed text streams. Binary modes, raw POSIX reads/writes and
+memory/cookie streams retain every byte. A separate on-target runtime regression
+checks all 256 byte values, small buffers, line buffering, EOF, seeks, ungetc,
+fdopen, freopen and exact CR output on redirected stdin/stdout/stderr. CI runs
+this regression and the O2 application cases with `fast-bufio=true`, then
+rebuilds the default library before the complete comparison. Runtime source,
+options and library digest are recorded in `build/llvm/OS9-RUNTIME.json` and
+in the application report. This suite measures complete program size, not execution speed or peak
 RAM. Requested data is the module header allocation request. CMOC and gcc6809
 await suitable OS-9 stdio/runtime integration before entering this comparison.
-The runner exits nonzero for correctness failures; CI retains that evidence and
-publishes the failures so they cannot silently become size winners.
+The runner exits nonzero for application or runtime regression failures; CI retains
+the evidence and reports failures so they cannot silently become size winners.
