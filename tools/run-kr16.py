@@ -109,7 +109,13 @@ def main():
             libraries = ['-Wl,--start-group', '-lgcc', '-lc', '-Wl,--end-group']
         elif args.compiler == 'vbcc':
             report['version'] = run(['vbcchc12'], version_probe=True).splitlines()[0]
-            report['release'] = '6809 Release 1 Preview (2026-01-25)'
+            manifest = ROOT / 'build/vbcc/COMPILER-PATCH.json'
+            report['compiler_patch'] = json.loads(manifest.read_text())
+            compiler = Path(shutil.which('vbcchc12', path=env['PATH']))
+            if hashlib.sha256(compiler.read_bytes()).hexdigest() != report['compiler_patch']['compiler_sha256']:
+                raise ValueError('VBCC compiler does not match the source-build manifest')
+            report['version'] += ' + array-offset fix (' + report['compiler_patch']['patch_sha256'][:12] + ')'
+            report['release'] = '6809 Release 1 Preview (2026-01-25) + array-offset fix'
             report['release_url'] = 'http://www.compilers.de/vbcc6809_20260125.zip'
             libraries = ['-L' + str(ROOT / 'build/vbcc/targets/6809-sim/lib'), '-lvc']
         elif args.compiler == 'llvm':

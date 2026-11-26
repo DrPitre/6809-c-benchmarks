@@ -1,6 +1,5 @@
 import copy
 import importlib.util
-import json
 from pathlib import Path
 import unittest
 
@@ -10,48 +9,31 @@ apps = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(apps)
 
 
-class KnownCompilerFailureTests(unittest.TestCase):
+class ApplicationChecksTests(unittest.TestCase):
     def setUp(self):
-        fixtures = json.loads((ROOT / 'benchmarks/os9-apps/cases.json').read_text())
-        self.row = {'application': 'ed', 'configuration_id': 'vb02', 'stage': 'execution',
-                    'status': 'FAIL', 'cases': [{'id': c['id'], 'status': 'PASS', 'files': [], 'execution_completed': True, 'copied': True}
-                                               for c in fixtures if c['app'] == 'ed']}
-        for case in self.row['cases']:
-            if case['id'] == 'substitute':
-                case.update(status='FAIL', actual='?\nalpha alpha\nbeta\n')
-            elif case['id'] == 'save-reopen':
-                case.update(status='FAIL', actual='?\nalpha\nbeta\n',
-                            files=[{'id': 'RESULT', 'status': 'FAIL', 'copied': True, 'actual': 'alpha\rbeta\r'}])
+        self.report = {'reached_completion': True, 'runtime_probe': {'status': 'PASS'},
+                       'vbcc_pointer_probes': [{'configuration_id': c, 'status': 'PASS'} for c in ('vb00', 'vb02')],
+                       'rows': [{'status': 'PASS'}, {'status': 'PASS'}]}
 
-    def test_recognizes_only_the_recorded_bug_without_marking_it_pass(self):
-        self.assertTrue(apps.known_vbcc_ed_offset_failure(self.row))
-        self.assertEqual(self.row['status'], 'FAIL')
-        other = copy.deepcopy(self.row)
-        other['configuration_id'] = 'll02'
-        self.assertFalse(apps.known_vbcc_ed_offset_failure(other))
+    def test_requires_complete_rows_and_both_pointer_regressions(self):
+        self.assertTrue(apps.report_passes(self.report, 2))
+        self.assertFalse(apps.report_passes(self.report, 3))
+        self.report['vbcc_pointer_probes'].pop()
+        self.assertFalse(apps.report_passes(self.report, 2))
 
-    def test_different_output_or_saved_bytes_are_new_failures(self):
-        for index in (0, 1):
-            row = copy.deepcopy(self.row)
-            failed = [c for c in row['cases'] if c['status'] == 'FAIL']
-            if index == 0:
-                failed[0]['actual'] = 'corrupted output'
-            else:
-                failed[1]['files'][0]['actual'] = 'alpha\nbeta\n'
-            self.assertFalse(apps.known_vbcc_ed_offset_failure(row))
+    def test_previously_known_ed_failure_is_no_longer_accepted(self):
+        self.report['rows'][0].update(status='FAIL', known_failure='old vbcc offset bug')
+        self.assertFalse(apps.report_passes(self.report, 2))
 
-    def test_another_fixture_failure_or_failed_build_is_not_allowed(self):
-        row = copy.deepcopy(self.row)
-        row['cases'][0]['status'] = 'FAIL'
-        self.assertFalse(apps.known_vbcc_ed_offset_failure(row))
-        self.row['stage'] = 'build'
-        self.assertFalse(apps.known_vbcc_ed_offset_failure(self.row))
+    def test_runtime_and_process_failures_are_not_accepted(self):
+        for field in ('runtime_probe', 'vbcc_pointer_probes'):
+            report = copy.deepcopy(self.report)
+            target = report[field] if field == 'runtime_probe' else report[field][0]
+            target['status'] = 'FAIL'
+            self.assertFalse(apps.report_passes(report, 2))
+        self.report['reached_completion'] = False
+        self.assertFalse(apps.report_passes(self.report, 2))
 
-    def test_execution_and_extraction_errors_cannot_be_accepted(self):
-        for field in ('execution_completed', 'copied'):
-            row = copy.deepcopy(self.row)
-            next(c for c in row['cases'] if c['id'] == 'substitute')[field] = False
-            self.assertFalse(apps.known_vbcc_ed_offset_failure(row))
-        row = copy.deepcopy(self.row)
-        next(c for c in row['cases'] if c['id'] == 'save-reopen')['files'][0]['copied'] = False
-        self.assertFalse(apps.known_vbcc_ed_offset_failure(row))
+    def test_duplicate_configuration_cannot_replace_a_missing_regression(self):
+        self.report['vbcc_pointer_probes'][1]['configuration_id'] = 'vb00'
+        self.assertFalse(apps.report_passes(self.report, 2))

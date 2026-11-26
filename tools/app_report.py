@@ -22,11 +22,15 @@ def render_applications(reports):
     if runtime:
         link = runtime['url'].removesuffix('.git') + '/commit/' + runtime['revision']
         chunks.append('<p>LLVM RC2 uses the OS-9 text runtime fix from <a href="' + esc(link) + '">picolibc ' + esc(runtime['revision'][:12]) + '</a>. The compiler remains the released RC2 binary.</p>')
+    if report.get('vbcc_compiler_patch'):
+        chunks.append('<p>vbcc is rebuilt from the pinned preview with the <a href="https://github.com/DrPitre/6809-c-benchmarks/blob/main/patches/vbcc-array-offset/fix.patch">one-past array-offset fix</a>.</p>')
     if report.get('vbcc_os9_runtime'):
         chunks.append('<p>vbcc uses the <a href="https://github.com/DrPitre/6809-c-benchmarks/blob/main/tools/vbcc-os9-rw.patch">OS-9 EOF wrapper fix</a>, which returns a zero-byte read at native end of file.</p>')
     probe = report.get('runtime_probe')
     if probe:
         chunks.append('<p>OS-9 text/binary runtime regression: <strong>' + esc(probe['status']) + '</strong> (including exact CR bytes on redirected standard output and error).</p>')
+    for item in report.get('vbcc_pointer_probes', []):
+        chunks.append('<p>vbcc array-offset regression (' + esc(item['configuration_id']) + '): <strong>' + esc(item['status']) + '</strong>.</p>')
     rows = report['rows']
     cases = [c for r in rows for c in r['cases']]
     chunks.append('<p>' + str(sum(c['status'] == 'PASS' for c in cases)) + '/' + str(len(cases)) +
