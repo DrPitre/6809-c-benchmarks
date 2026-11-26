@@ -1,4 +1,5 @@
 """Build and execute a separate NitrOS-9 application suite on the real kernel."""
+from c3_library import library_metadata
 import argparse
 import hashlib
 import json
@@ -126,6 +127,7 @@ def main():
                                     'LLVM': (ROOT / 'build/llvm/VERSION').read_text().strip(),
                                     'VBCC': '6809 Release 1 Preview 2026-01-25; archive SHA-256 18db043d4d4c8b0a16d4fa4b813616f277fcfb3667be0eda2334a8b8b024917e'},
               'cmoc_library': json.loads((cmoc_library / 'LIBRARY.json').read_text()),
+              'c3_library': library_metadata(c3,sources['c_libs']['revision']),
               'vbcc_compiler_patch': json.loads((vbcc / 'COMPILER-PATCH.json').read_text()),
               'vbcc_os9_runtime': json.loads((vbcc / 'OS9-RUNTIME.json').read_text()),
               'llvm_runtime': json.loads((ROOT / 'build/llvm/OS9-RUNTIME.json').read_text()),

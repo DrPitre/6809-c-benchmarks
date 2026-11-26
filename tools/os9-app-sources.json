@@ -17,6 +17,6 @@
   },
   "c_libs": {
     "url": "https://github.com/nitros9project/nitros9-c-libs.git",
-    "revision": "566bb64d5dd58b29cf53ea44c8684037f32ed083"
+    "revision": "02d0b0d0cf685179b762b0090120abf73afad58d"
   }
 }

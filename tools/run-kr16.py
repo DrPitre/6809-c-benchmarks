@@ -1,5 +1,6 @@
 """Execute identical K&R-compatible kernels through a shared USIM harness."""
 from usim_metadata import emulator_metadata
+from c3_library import library_metadata
 import argparse
 import hashlib
 import importlib.util
@@ -98,7 +99,8 @@ def main():
                 raise ValueError('C3 revision mismatch')
             report['toolchain_revision'] = revision
             report['version'] = 'C3 ' + revision[:12]
-            libraries = ['-L' + str(c3base / 'lwbackend'), '-lc3lw']
+            report['c3_library'] = library_metadata(c3base,json.loads((ROOT/'tools/os9-app-sources.json').read_text())['c_libs']['revision'])
+            libraries = ['-L' + str(c3base / 'lwbackend'), '-lc3', '-lc3lw']
         elif args.compiler == 'gcc6809':
             report['version'] = run(['m6809-unknown-elf-gcc', '--version']).splitlines()[0]
             report['release_url'] = 'https://github.com/JKBert/gcc6809'

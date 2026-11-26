@@ -18,6 +18,10 @@ def render_applications(reports):
     if len(apps) != 1:
         raise ValueError('Expected exactly one OS-9 application report')
     report = apps[0]
+    if report.get('c3_library'):
+        library=report['c3_library']
+        link=library['url'].removesuffix('.git')+'/commit/'+library['revision']
+        chunks.append('<p>C3 links native <code>libc3.a</code> and generated headers from <a href="'+esc(link)+'">nitros9-c-libs '+esc(library['revision'][:12])+'</a>. C3 and CMOC now build the same canonical C library sources for their native ABIs, without runtime adapters. Compiler-owned C3 startup and floating-point primitives remain in the compiler repo.</p>')
     if report.get('cmoc_library'):
         library = report['cmoc_library']
         link = library['url'].removesuffix('.git') + '/commit/' + library['revision']

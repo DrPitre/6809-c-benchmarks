@@ -3,7 +3,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 source="$root/build/sources/nitros9-languages"
 revision=$(cat "$root/tools/c3-revision.txt")
-if [ ! -d "$source/.git" ]; then
+if [ ! -e "$source/.git" ]; then
     mkdir -p "$source"
     git -C "$source" init
     git -C "$source" remote add origin https://github.com/nitros9project/nitros9-languages.git
@@ -21,6 +21,16 @@ for stage in exec prep comp comp1 comp2 optx; do
     make -C "$source/c3/build/unix/$stage" CPPFLAGS=-D_DEFAULT_SOURCE
 done
 sh "$source/c3/scripts/check-unix-strings.sh"
+python3 "$root/tools/build-nitros9-c-libs.py" --fetch-only
+export NITROS9_C_LIBS_DIR="$root/build/sources/nitros9-c-libs"
+python3 - "$root/tools/os9-app-sources.json" "$source/c3/nitros9-c-libs.revision" <<'PYCODE'
+import json,sys
+from pathlib import Path
+expected=json.loads(Path(sys.argv[1]).read_text())['c_libs']['revision']
+if Path(sys.argv[2]).read_text().strip()!=expected:raise SystemExit('C3/CMOC canonical library pins differ')
+PYCODE
 cd "$source/c3/lwbackend"
 sh buildrt.sh
 sh buildlibc.sh
+
+sh "$source/c3/scripts/check-shared-library.sh"

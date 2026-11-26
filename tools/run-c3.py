@@ -1,4 +1,5 @@
 """Probe unchanged C89 kernels with C3; compilation is not runtime correctness."""
+from c3_library import library_metadata
 import argparse
 import json
 import os
@@ -53,6 +54,7 @@ def main():
         actual = subprocess.check_output(['git', '-C', str(c3base), 'rev-parse', 'HEAD'], text=True).strip()
         if actual != revision:
             raise ValueError('C3 checkout does not match pinned revision')
+        report['c3_library'] = library_metadata(c3base,json.loads((ROOT/'tools/os9-app-sources.json').read_text())['c_libs']['revision'])
         # A known-supported program must link before kernel failures can be
         # classified as compatibility results instead of broken infrastructure.
         (build / 'smoke.c').write_text('int main() { return 0; }\n')
