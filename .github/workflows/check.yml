@@ -210,8 +210,38 @@ jobs:
             build/kr16-gcc6809-O*/
             build/gcc6809/source-manifest.json
 
+  os9-apps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y build-essential bison flex curl git unzip xz-utils libsdl2-dev pkg-config zlib1g-dev
+      - run: sh tools/build-cmoc.sh
+      - run: sh tools/build-c3.sh
+      - run: sh tools/install-llvm.sh
+      - run: sh tools/install-vbcc.sh
+      - name: Build pinned NitrOS-9 application environment
+        run: python3 tools/build-os9-apps.py
+      - name: Execute application output checks
+        # Preserve correctness failures as results, as in the kernel comparison.
+        continue-on-error: true
+        run: python3 tools/run-os9-apps.py --json reports/os9-apps.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: report-os9-apps
+          path: reports/os9-apps.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: os9-apps-evidence
+          path: |
+            build/os9-apps/
+            build/sources/nitros9/recipes/picothing/l2/rel_picothing.srec
+
   matrix:
-    needs: [check, cmoc, c3, llvm, vbcc, gcc6809]
+    needs: [check, cmoc, c3, llvm, vbcc, gcc6809, os9-apps]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -228,7 +258,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
-          python3 tools/matrix.py reports build/site --expected-reports 20 \
+          python3 tools/matrix.py reports build/site --expected-reports 21 \
             --run-started-at "$started" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           cat build/site/matrix.md >> "$GITHUB_STEP_SUMMARY"

@@ -96,6 +96,7 @@ def ordinal(rank):
 def render(reports, previous_reports=None, historical=False,
            historical_label="CMOC 0.1.99", history_links=(),
            run_started_at=None, run_url=None):
+    reports = [r for r in reports if r.get("suite") != "os9-apps"]
     compilers = comparison_compilers(reports)
     standard_compilers = "CMOC/LLVM" + ("/gcc6809" if "GCC6809" in compilers else "")
     validate_shared_sources(reports)
@@ -453,6 +454,9 @@ def main():
     from focused_report import render_focused
     markdown, document = render_focused(reports, history_links=links, previous_reports=bool(previous))
     args.output.mkdir(parents=True, exist_ok=True)
+    if any(r.get("suite") == "os9-apps" for r in reports):
+        from app_report import render_applications
+        (args.output / "applications.html").write_text(render_applications(reports))
     for name, (preserved, label, data, metadata) in histories.items():
         archive = args.output / 'history' / name
         archive.mkdir(parents=True, exist_ok=True)

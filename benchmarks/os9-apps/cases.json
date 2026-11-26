@@ -1,0 +1,172 @@
+[
+  {
+    "id": "normal",
+    "app": "uniq",
+    "args": [],
+    "input": "alpha\nalpha\nbeta\nGamma\nGamma\nGamma\ndelta\n",
+    "output": "alpha\nbeta\nGamma\ndelta\n"
+  },
+  {
+    "id": "unique",
+    "app": "uniq",
+    "args": [
+      "-u"
+    ],
+    "input": "alpha\nalpha\nbeta\nGamma\nGamma\nGamma\ndelta\n",
+    "output": "beta\ndelta\n"
+  },
+  {
+    "id": "repeated",
+    "app": "uniq",
+    "args": [
+      "-d"
+    ],
+    "input": "alpha\nalpha\nbeta\nGamma\nGamma\nGamma\ndelta\n",
+    "output": "alpha\nGamma\n"
+  },
+  {
+    "id": "counts",
+    "app": "uniq",
+    "args": [
+      "-c"
+    ],
+    "input": "alpha\nalpha\nbeta\nGamma\nGamma\nGamma\ndelta\n",
+    "output": "2 alpha\n1 beta\n3 Gamma\n1 delta\n"
+  },
+  {
+    "id": "fields",
+    "app": "uniq",
+    "args": [
+      "-1"
+    ],
+    "input": "one same\ntwo same\nthree other\n",
+    "output": "one same\nthree other\n"
+  },
+  {
+    "id": "chars",
+    "app": "uniq",
+    "args": [
+      "^1"
+    ],
+    "input": "afoo\nbfoo\ncbar\n",
+    "output": "afoo\ncbar\n"
+  },
+  {
+    "id": "empty",
+    "app": "uniq",
+    "args": [],
+    "input": "",
+    "output": ""
+  },
+  {
+    "id": "nonadj",
+    "app": "uniq",
+    "args": [],
+    "input": "alpha\nbeta\nalpha\n",
+    "output": "alpha\nbeta\nalpha\n"
+  },
+  {
+    "id": "literal",
+    "app": "dgrep",
+    "args": [
+      "alpha"
+    ],
+    "input": "Alpha\nbeta\nALPHABET\naab\nacb\n123\n\n",
+    "output": "Alpha\nALPHABET\n"
+  },
+  {
+    "id": "anchor",
+    "app": "dgrep",
+    "args": [
+      "^alpha$"
+    ],
+    "input": "Alpha\nbeta\nALPHABET\naab\nacb\n123\n\n",
+    "output": "Alpha\n"
+  },
+  {
+    "id": "class",
+    "app": "dgrep",
+    "args": [
+      "^a[ac]+b$"
+    ],
+    "input": "Alpha\nbeta\nALPHABET\naab\nacb\n123\n\n",
+    "output": "aab\nacb\n"
+  },
+  {
+    "id": "star",
+    "app": "dgrep",
+    "args": [
+      "^ab*$"
+    ],
+    "input": "a\nab\nabbb\nac\n",
+    "output": "a\nab\nabbb\n"
+  },
+  {
+    "id": "plus",
+    "app": "dgrep",
+    "args": [
+      "^ab+$"
+    ],
+    "input": "a\nab\nabbb\nac\n",
+    "output": "ab\nabbb\n"
+  },
+  {
+    "id": "digit",
+    "app": "dgrep",
+    "args": [
+      ":d+"
+    ],
+    "input": "Alpha\nbeta\nALPHABET\naab\nacb\n123\n\n",
+    "output": "123\n"
+  },
+  {
+    "id": "count",
+    "app": "dgrep",
+    "args": [
+      "-c",
+      "alpha"
+    ],
+    "input": "Alpha\nbeta\nALPHABET\naab\nacb\n123\n\n",
+    "output": "2\n"
+  },
+  {
+    "id": "invert",
+    "app": "dgrep",
+    "args": [
+      "-v",
+      "alpha"
+    ],
+    "input": "Alpha\nbeta\nALPHABET\naab\nacb\n123\n\n",
+    "output": "beta\naab\nacb\n123\n\n"
+  },
+  {
+    "id": "numbers",
+    "app": "dgrep",
+    "args": [
+      "-n",
+      "alpha"
+    ],
+    "input": "Alpha\nbeta\nALPHABET\naab\nacb\n123\n\n",
+    "output": "1\tAlpha\n3\tALPHABET\n"
+  },
+  {
+    "id": "file",
+    "app": "dgrep",
+    "args": [
+      "-f",
+      "alpha",
+      "INPUT"
+    ],
+    "input": "Alpha\nbeta\nALPHABET\naab\nacb\n123\n\n",
+    "output": "Alpha\nALPHABET\n"
+  },
+  {
+    "id": "nomatch",
+    "app": "dgrep",
+    "args": [
+      "zzzzz"
+    ],
+    "input": "Alpha\nbeta\nALPHABET\naab\nacb\n123\n\n",
+    "output": ""
+  }
+]

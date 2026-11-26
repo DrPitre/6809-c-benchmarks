@@ -1,0 +1,93 @@
+--- a/kreider/uniq/uniq.c
++++ b/kreider/uniq/uniq.c
+@@ -41,6 +41,10 @@
+   
+ #include <stdio.h>
+ #include <ctype.h>
++#include <stdlib.h>
++#include <string.h>
++
++char *skip();
+  
+ #define MAXLINE 160
+  
+@@ -161,14 +165,14 @@
+          if (uniq)
+                {
+                uniq = 0;
+-               return;
++               return 0;
+                }
+          break;
+  
+       case 'd':
+          if (uniq)
+                break;
+-         return;
++         return 0;
+  
+       case 'c':
+          printd(linec);
+@@ -196,7 +200,7 @@
+    }
+ 
+  
+-skip(s)
++char *skip(s)
+ char *s;
+    {
+    int nf, nl;
+--- a/kreider/dgrep/grep.c
++++ b/kreider/dgrep/grep.c
+@@ -19,6 +19,8 @@
+ */
+ 
+ #include <stdio.h>
++#include <ctype.h>
++#include <stdlib.h>
+ #include "grep.h"
+ 
+ 
+@@ -88,6 +90,7 @@
+ char    pbuf[PMAX];
+ 
+ main(argc, argv)
++int argc;
+ char *argv[];
+    {
+    register char   *p;
+@@ -101,7 +104,7 @@
+    if (argc == 2 && argv[1][0] == '?' && argv[1][1] == 0)
+          {
+          help();
+-         return;
++         return 0;
+          }
+    nfile = argc-1;
+    gotpattern = 0;
+@@ -158,7 +161,7 @@
+       fflag = fflag ^ (nfile > 0);
+       for (i = 1; i < argc; ++i) {
+          if (p = argv[i]) {
+-            if ((f = fopen(p, "r")) == -1)
++            if ((f = fopen(p, "r")) == NULL)
+                fprintf(stderr, "can't open %s\n", p);
+             else {
+                grep(f, p);
+@@ -167,6 +170,7 @@
+          }
+       }
+    }
++   return 0;
+ }
+ 
+ 
+@@ -482,7 +486,7 @@
+          break;
+ 
+       case EOL:
+-         if (*l != '\0')
++         if (*l != '\0' && *l != '\n')
+             return (FALSE);
+          break;
+ 
