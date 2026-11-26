@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 mkdir -p build/downloads build/sources build/vbcc
 archive=build/downloads/vbcc6809_20260125.zip
 if [ ! -f "$archive" ]; then
-    curl -fL --retry 3 http://www.compilers.de/vbcc6809_20260125.zip -o "$archive"
+    curl -fL --retry 3 --retry-all-errors http://www.compilers.de/vbcc6809_20260125.zip -o "$archive"
 fi
 python3 - "$archive" <<'PY'
 import hashlib, pathlib, sys, zipfile

@@ -168,5 +168,83 @@
     ],
     "input": "Alpha\nbeta\nALPHABET\naab\nacb\n123\n\n",
     "output": ""
+  },
+  {
+    "id": "append-print",
+    "app": "ed",
+    "args": [
+      "-"
+    ],
+    "input": "a\nalpha\nbeta\n.\n1,$p\nQ\n",
+    "output": "alpha\nbeta\n"
+  },
+  {
+    "id": "substitute",
+    "app": "ed",
+    "args": [
+      "-"
+    ],
+    "input": "a\nalpha alpha\nbeta\n.\n1s/alpha/ALPHA/g\n1,$p\nQ\n",
+    "output": "ALPHA ALPHA\nbeta\n"
+  },
+  {
+    "id": "delete",
+    "app": "ed",
+    "args": [
+      "-"
+    ],
+    "input": "a\none\ntwo\nthree\n.\n2d\n1,$p\nQ\n",
+    "output": "one\nthree\n"
+  },
+  {
+    "id": "insert",
+    "app": "ed",
+    "args": [
+      "-"
+    ],
+    "input": "a\none\nthree\n.\n2i\ntwo\n.\n1,$p\nQ\n",
+    "output": "one\ntwo\nthree\n"
+  },
+  {
+    "id": "move",
+    "app": "ed",
+    "args": [
+      "-"
+    ],
+    "input": "a\none\ntwo\nthree\n.\n1m3\n1,$p\nQ\n",
+    "output": "two\nthree\none\n"
+  },
+  {
+    "id": "global",
+    "app": "ed",
+    "args": [
+      "-"
+    ],
+    "input": "a\nred\nblue\nredder\n.\ng/red/p\nQ\n",
+    "output": "red\nredder\n"
+  },
+  {
+    "id": "save-reopen",
+    "app": "ed",
+    "args": [
+      "-"
+    ],
+    "input": "a\nalpha\nbeta\n.\n1s/alpha/ALPHA/\nw @RESULT@\nE @RESULT@\n1,$p\nq\n",
+    "output": "ALPHA\nbeta\n",
+    "output_files": {
+      "RESULT": "ALPHA\nbeta\n"
+    }
+  },
+  {
+    "id": "read-native",
+    "app": "ed",
+    "args": [
+      "-"
+    ],
+    "input": "r @SOURCE@\n1,$p\nQ\n",
+    "output": "alpha\nbeta\n",
+    "files": {
+      "SOURCE": "alpha\nbeta\n"
+    }
   }
 ]

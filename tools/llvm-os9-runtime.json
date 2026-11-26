@@ -1,0 +1,6 @@
+{
+  "url": "https://github.com/markrvmurray/picolibc.git",
+  "revision": "4867b6d3086ff1f14db34d3bb46b3072a977180e",
+  "base_revision": "35d2b8df1df960aba535ca5579b169a65f46dc72",
+  "meson_version": "1.11.2"
+}
